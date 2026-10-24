@@ -15,6 +15,7 @@ const claimCustomerCallForDailyCallMock = vi.fn();
 const releaseCustomerCallForDailyCallMock = vi.fn();
 const setDailyCallBookmarkMock = vi.fn();
 const setDailyCallDoNotContactFlagMock = vi.fn();
+const setDailyCallDoNotContactFlagsBulkMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
@@ -45,6 +46,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   releaseCustomerCallForDailyCall: (...args: unknown[]) => releaseCustomerCallForDailyCallMock(...args),
   setDailyCallBookmark: (...args: unknown[]) => setDailyCallBookmarkMock(...args),
   setDailyCallDoNotContactFlag: (...args: unknown[]) => setDailyCallDoNotContactFlagMock(...args),
+  setDailyCallDoNotContactFlagsBulk: (...args: unknown[]) => setDailyCallDoNotContactFlagsBulkMock(...args),
   createCustomerLogForDailyCall: (...args: unknown[]) => createCustomerLogForDailyCallMock(...args),
   subscribeToDailyCallMonitoringUpdates: (...args: unknown[]) => subscribeToDailyCallMonitoringUpdatesMock(...args),
 }));
@@ -165,6 +167,8 @@ describe('DailyCallMonitoringView communication actions', () => {
     releaseCustomerCallForDailyCallMock.mockReset();
     setDailyCallBookmarkMock.mockReset();
     setDailyCallDoNotContactFlagMock.mockReset();
+    setDailyCallDoNotContactFlagsBulkMock.mockReset();
+    setDailyCallDoNotContactFlagsBulkMock.mockImplementation(async (ids: string[]) => ids.length);
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
     createContactMock.mockReset();
@@ -309,7 +313,7 @@ describe('DailyCallMonitoringView communication actions', () => {
       ['Recovery List', 'recovery'],
       ['Verified Prospects', 'verified'],
       ['Unverified Prospects', 'unverified'],
-      ['blacklisted/rejected -do not contact', 'blocked'],
+      ['Blacklisted/Rejected', 'blocked'],
     ]) {
       await expandList(label);
       const expandedButton = screen.getByRole('button', { name: new RegExp(`^${label}`, 'i') });
@@ -395,11 +399,11 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
 
-    await expandList('blacklisted/rejected -do not contact');
+    await expandList('Blacklisted/Rejected');
     const blockedList = (await screen.findByText('Blacklisted By Status')).closest('article')!;
     expect(within(blockedList).getByText('Blacklisted By Status')).toBeInTheDocument();
     expect(within(blockedList).queryByText('Good Debt With Balance')).not.toBeInTheDocument();
-    expect(within(blockedList).getByRole('button', { name: 'Mark Blacklisted By Status Do Not Call' })).toHaveClass('bg-red-100');
+    expect(within(blockedList).getByRole('button', { name: 'Mark Blacklisted By Status Blacklisted/Rejected' })).toHaveClass('bg-red-100');
   });
 
   it('shows company-wide do-not-contact identities without exposing contact or sales actions', async () => {
@@ -414,12 +418,12 @@ describe('DailyCallMonitoringView communication actions', () => {
     });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
-    await expandList('blacklisted/rejected -do not contact');
+    await expandList('Blacklisted/Rejected');
 
     const blockedList = document.getElementById('blocked-customer-list')!;
     expect(within(blockedList).getByText('Foreign Blacklist Customer')).toBeInTheDocument();
     expect(within(blockedList).getByText('Assigned to Other Sales Agent · Beta')).toBeInTheDocument();
-    expect(within(blockedList).getByText('Do not contact')).toBeInTheDocument();
+    expect(within(blockedList).getByText('Blacklisted/Rejected')).toBeInTheDocument();
     expect(within(blockedList).queryByText('09123456789')).not.toBeInTheDocument();
     expect(within(blockedList).queryByRole('button', { name: /Call Foreign Blacklist Customer/i })).not.toBeInTheDocument();
     expect(within(blockedList).queryByRole('button', { name: /Send SMS to Foreign Blacklist Customer/i })).not.toBeInTheDocument();
@@ -472,7 +476,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.getByText('Stop here')).toBeInTheDocument();
   });
 
-  it('requires a reason when a master user marks a customer Do Not Call', async () => {
+  it('requires one of the reason options and saves Other reasons custom text for a master user', async () => {
     const user = userEvent.setup();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -484,18 +488,47 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
     await expandList('Priority List', user);
-    const doNotCallButton = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
+    const doNotCallButton = await screen.findByRole('button', { name: 'Mark Test Shop Blacklisted/Rejected' });
     await user.click(doNotCallButton);
-    const dialog = await screen.findByRole('dialog', { name: 'Mark Test Shop as Do Not Call' });
-    expect(within(dialog).getByRole('button', { name: 'Mark Do Not Call' })).toBeDisabled();
-    await user.type(within(dialog).getByLabelText('Reason'), 'not a real customer');
-    await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Call' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Mark Test Shop as Blacklisted/Rejected' });
+    const reason = within(dialog).getByLabelText('Reason');
+    expect(within(dialog).getAllByRole('option').map(option => option.textContent)).toEqual(['Select a reason', 'Contact number can’t be reached', 'Do not sell diesel parts', 'Not interested', 'Other reasons']);
+    expect(within(dialog).getByRole('button', { name: 'Mark Blacklisted/Rejected' })).toBeDisabled();
+    await user.selectOptions(reason, 'Other reasons');
+    const customReason = within(dialog).getByLabelText('Custom reason');
+    await user.type(customReason, 'Customer requested no further contact');
+    await user.click(within(dialog).getByRole('button', { name: 'Mark Blacklisted/Rejected' }));
 
-    expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true, 'not a real customer');
-    expect(await screen.findByRole('button', { name: 'Remove Test Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
+    expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true, 'Customer requested no further contact', 'Other reasons');
+    expect(await screen.findByRole('button', { name: 'Remove Test Shop Blacklisted/Rejected' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('does not expose Do Not Call controls to non-master users', async () => {
+  it('bulk applies one custom reason to ten selected customers for the master user', async () => {
+    const user = userEvent.setup();
+    const contacts = Array.from({ length: 10 }, (_, index) => ({
+      ...baseSnapshot.contacts[0], id: `bulk-${index + 1}`, shopName: `Bulk Shop ${index + 1}`, status: 'active',
+    }));
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts,
+      purchases: contacts.map(contact => ({ id: `purchase-${contact.id}`, contact_id: contact.id, amount: 100, status: 'paid', purchased_at: new Date().toISOString() })),
+      masterList: contacts.map((contact, index) => ({ id: contact.id, shopName: contact.shopName, listCategory: 'priority', purchaseCount: 1, lastPurchaseDateRaw: new Date().toISOString(), currentMonthSales: 100 + index })),
+    });
+    render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
+    await expandList('Priority List', user);
+    for (let index = 1; index <= 10; index += 1) {
+      await user.click(await screen.findByRole('checkbox', { name: `Select Bulk Shop ${index} for bulk Blacklisted/Rejected` }));
+    }
+    await user.click(screen.getByRole('button', { name: 'Apply Blacklisted/Rejected' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Apply Blacklisted/Rejected' });
+    await user.selectOptions(within(dialog).getByLabelText('Reason'), 'Other reasons');
+    await user.type(within(dialog).getByLabelText('Custom reason'), 'Shared bulk custom reason');
+    await user.click(within(dialog).getByRole('button', { name: 'Apply to selected customers' }));
+    await waitFor(() => expect(setDailyCallDoNotContactFlagsBulkMock).toHaveBeenCalledWith(contacts.map(contact => contact.id), 'Shared bulk custom reason', 'Other reasons'));
+    expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', title: 'Blacklisted/Rejected applied' }));
+  });
+
+  it('does not expose Blacklisted/Rejected controls to non-master users', async () => {
     const user = userEvent.setup();
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,
@@ -505,8 +538,8 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
     await expandList('Priority List', user);
-    expect(screen.queryByRole('button', { name: 'Mark Test Shop Do Not Call' })).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Test Shop Do Not Call' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mark Test Shop Blacklisted/Rejected' })).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Test Shop Blacklisted/Rejected' })).toBeInTheDocument();
   });
 
   it('opens the reason dialog without opening the customer when the action is clicked', async () => {
@@ -521,10 +554,10 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
     await expandList('Priority List', user);
-    const button = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
+    const button = await screen.findByRole('button', { name: 'Mark Test Shop Blacklisted/Rejected' });
     await user.click(button);
 
-    expect(await screen.findByRole('dialog', { name: 'Mark Test Shop as Do Not Call' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Mark Test Shop as Blacklisted/Rejected' })).toBeInTheDocument();
     expect(setDailyCallDoNotContactFlagMock).not.toHaveBeenCalled();
     expect(fetchContactForDailyCallMock).not.toHaveBeenCalled();
     expect(screen.queryByTestId('full-contact-details')).not.toBeInTheDocument();

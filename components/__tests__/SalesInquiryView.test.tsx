@@ -13,6 +13,7 @@ const getSalesInquiryMock = vi.fn();
 const approveInquiryMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
+const fetchDailyCallMasterListMock = vi.hoisted(() => vi.fn());
 const getProductPriceMock = vi.fn();
 const fetchProductByIdMock = vi.fn();
 const dispatchWorkflowNotificationMock = vi.fn();
@@ -35,6 +36,14 @@ vi.mock('../../services/customerDatabaseLocalApiService', () => ({
   fetchContacts: (...args: any[]) => fetchContactsMock(...args),
   fetchContactById: (...args: any[]) => fetchContactByIdMock(...args),
 }));
+
+vi.mock('../../services/dailyCallMonitoringService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/dailyCallMonitoringService')>();
+  return {
+    ...actual,
+    fetchDailyCallMasterList: (...args: any[]) => fetchDailyCallMasterListMock(...args),
+  };
+});
 
 vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
@@ -214,6 +223,30 @@ const makeInquiry = (overrides: Record<string, any> = {}) => ({
 });
 
 describe('SalesInquiryView', () => {
+  it('limits the customer picker to Daily Call eligible customer categories', async () => {
+    const user = userEvent.setup();
+    fetchContactsMock.mockResolvedValue([
+      baseContacts[0],
+      { ...baseContacts[1], id: 'blocked-1', company: 'Blacklisted Customer' },
+    ]);
+    fetchDailyCallMasterListMock.mockResolvedValue({
+      items: [
+        { id: 'c-1', listCategory: 'priority' },
+        { id: 'blocked-1', listCategory: 'blocked' },
+      ],
+      meta: { count: 2 },
+    });
+
+    render(<SalesInquiryView />);
+
+    const customerPicker = await screen.findByRole('combobox', { name: 'Customer' });
+    await waitFor(() => expect(fetchDailyCallMasterListMock).toHaveBeenCalled());
+    expect(within(customerPicker).getByRole('option', { name: 'Acme Corp' })).toBeInTheDocument();
+    expect(within(customerPicker).queryByRole('option', { name: 'Blacklisted Customer' })).not.toBeInTheDocument();
+    await user.selectOptions(customerPicker, 'c-1');
+    expect(customerPicker).toHaveValue('c-1');
+  });
+
   it('blocks Sales Order generation when an inquiry already has a Sales Order reference', () => {
     expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: 'so-22' }, true, true, false, false)).toBe(false);
     expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: '' }, true, true, false, false)).toBe(true);
@@ -241,6 +274,10 @@ describe('SalesInquiryView', () => {
     URL.createObjectURL = vi.fn(() => 'blob:sales-inquiry-jpeg');
     URL.revokeObjectURL = vi.fn();
     fetchContactsMock.mockResolvedValue(baseContacts);
+    fetchDailyCallMasterListMock.mockResolvedValue({
+      items: ['c-1', 'c-2', 'c-3', 'c-sunle'].map((id) => ({ id, listCategory: 'priority' })),
+      meta: { count: 4 },
+    });
     fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
     getSalesInquiryMock.mockResolvedValue(null);

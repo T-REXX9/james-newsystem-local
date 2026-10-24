@@ -11,4 +11,10 @@ export const isBlockedDailyCallCustomerRow = (row: Pick<DailyCallCustomerRow, 's
 export const isBlockedContact = (contact: Pick<Contact, 'status' | 'debtType'>): boolean =>
   contact.status === CustomerStatus.BLACKLISTED || String(contact.debtType || '').trim().toLowerCase() === 'bad';
 
-export const DO_NOT_CONTACT_LABEL = 'blacklisted/rejected -do not contact';
+export const DO_NOT_CONTACT_LABEL = 'Blacklisted/Rejected';
+export const DO_NOT_CONTACT_REASON_OPTIONS = [
+  'Contact number can’t be reached',
+  'Do not sell diesel parts',
+  'Not interested',
+  'Other reasons',
+] as const;

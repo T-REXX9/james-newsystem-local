@@ -56,4 +56,75 @@ describe('CustomerAutocomplete', () => {
 
     expect(screen.getByText('Customer 51')).toBeInTheDocument();
   });
+
+  it('keeps typed text when the selected customer is refreshed with the same identity and display name', () => {
+    const { rerender } = render(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-1', company: 'Customer One' }}
+      />,
+    );
+    const input = screen.getByPlaceholderText('Search customer...');
+
+    fireEvent.change(input, { target: { value: 'Another customer' } });
+    rerender(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-1', company: 'Customer One' }}
+      />,
+    );
+
+    expect(input).toHaveValue('Another customer');
+  });
+
+  it('updates the query when the selected customer identity or display name changes', () => {
+    const { rerender } = render(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-1', company: 'Customer One' }}
+      />,
+    );
+    const input = screen.getByPlaceholderText('Search customer...');
+
+    fireEvent.change(input, { target: { value: 'Another customer' } });
+    rerender(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-2', company: 'Customer Two' }}
+      />,
+    );
+
+    expect(input).toHaveValue('Customer Two');
+
+    fireEvent.change(input, { target: { value: 'Edited query' } });
+    rerender(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-2', company: 'Updated Customer Two' }}
+      />,
+    );
+
+    expect(input).toHaveValue('Updated Customer Two');
+  });
+
+  it('clears the query when the selected customer is cleared', () => {
+    const { rerender } = render(
+      <CustomerAutocomplete
+        contacts={[]}
+        onSelect={vi.fn()}
+        selectedCustomer={{ id: 'customer-1', company: 'Customer One' }}
+      />,
+    );
+    const input = screen.getByPlaceholderText('Search customer...');
+
+    fireEvent.change(input, { target: { value: 'Another customer' } });
+    rerender(<CustomerAutocomplete contacts={[]} onSelect={vi.fn()} selectedCustomer={null} />);
+
+    expect(input).toHaveValue('');
+  });
 });

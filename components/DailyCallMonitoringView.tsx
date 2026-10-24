@@ -66,6 +66,7 @@ import {
   releaseCustomerCallForDailyCall,
   setDailyCallBookmark,
   setDailyCallDoNotContactFlag,
+  setDailyCallDoNotContactFlagsBulk,
   subscribeToDailyCallMonitoringUpdates
 } from '../services/dailyCallMonitoringService';
 import { createContact, fetchContactById, fetchContactForDailyCall, isPendingDuplicateProspectApproval, updateContact } from '../services/customerDatabaseLocalApiService';
@@ -95,7 +96,7 @@ import {
   formatComment,
   getPhoneNumber
 } from '../utils/formatUtils';
-import { DO_NOT_CONTACT_LABEL, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
+import { DO_NOT_CONTACT_LABEL, DO_NOT_CONTACT_REASON_OPTIONS, isBlockedContact } from '../utils/dailyCallBlockedCustomer';
 import {
   DAILY_CALL_PRIORITY_FROM_DATE,
   resolveDailyCallListCategory,
@@ -108,7 +109,7 @@ import {
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
-import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount, isSalesStaffAccount } from '../constants';
+import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount, isMasterUserType, isSalesStaffAccount } from '../constants';
 import { createWorkflowHistoryState } from '../utils/workflowHistory';
 import { canPerformAction } from '../utils/actionPermissions';
 import {
@@ -654,7 +655,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const { addToast } = useToast();
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
-  const canManageDoNotCall = isMasterUserAccount(currentUser);
+  const canManageDoNotCall = isMasterUserType(currentUser);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [masterListRows, setMasterListRows] = useState<DailyCallMasterCustomerRow[]>([]);
   const [doNotContactCustomers, setDoNotContactCustomers] = useState<DailyCallDoNotContactCustomer[]>([]);
@@ -663,6 +664,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [pendingDoNotCallContact, setPendingDoNotCallContact] = useState<{ id: string; company: string } | null>(null);
   const [doNotCallReason, setDoNotCallReason] = useState('');
+  const [doNotCallCustomReason, setDoNotCallCustomReason] = useState('');
+  const [selectedForBlacklist, setSelectedForBlacklist] = useState<Set<string>>(() => new Set());
+  const [bulkBlacklistDialogOpen, setBulkBlacklistDialogOpen] = useState(false);
+  const [bulkBlacklistReason, setBulkBlacklistReason] = useState('');
+  const [bulkBlacklistCustomReason, setBulkBlacklistCustomReason] = useState('');
+  const [savingBulkBlacklist, setSavingBulkBlacklist] = useState(false);
   const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
@@ -1985,6 +1992,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     const currentRow = masterListRows.find(row => row.id === contactId);
     if (!currentRow?.doNotContact) {
       setDoNotCallReason('');
+      setDoNotCallCustomReason('');
       setPendingDoNotCallContact({ id: contactId, company: currentRow?.shopName || contacts.find(contact => contact.id === contactId)?.company || 'Customer' });
       return;
     }
@@ -1992,31 +2000,54 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     try {
       await setDailyCallDoNotContactFlag(contactId, false);
       setMasterListRows(rows => rows.map(row => row.id === contactId ? { ...row, doNotContact: false, doNotContactReason: '' } : row));
-      addToast({ type: 'success', title: 'Do Not Call removed', description: 'The customer flag was updated.' });
+      addToast({ type: 'success', title: 'Blacklisted/Rejected removed', description: 'The customer flag was updated.' });
     } catch {
-      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
+      addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: 'Please try again.' });
     } finally {
       setSavingDoNotCallId(null);
     }
   }, [addToast, canManageDoNotCall, contacts, masterListRows, savingDoNotCallId]);
 
   const handleConfirmDoNotCall = useCallback(async () => {
-    if (!canManageDoNotCall || !pendingDoNotCallContact || savingDoNotCallId || !doNotCallReason.trim()) return;
+    const reason = doNotCallReason === 'Other reasons' ? doNotCallCustomReason.trim() : doNotCallReason;
+    if (!canManageDoNotCall || !pendingDoNotCallContact || savingDoNotCallId || !reason.trim()) return;
     const { id, company } = pendingDoNotCallContact;
-    const reason = doNotCallReason.trim();
     setSavingDoNotCallId(id);
     try {
-      await setDailyCallDoNotContactFlag(id, true, reason);
+      await setDailyCallDoNotContactFlag(id, true, reason, doNotCallReason);
       setMasterListRows(rows => rows.map(row => row.id === id ? { ...row, doNotContact: true, doNotContactReason: reason } : row));
       setPendingDoNotCallContact(null);
       setDoNotCallReason('');
-      addToast({ type: 'success', title: 'Do Not Call marked', description: `${company} was updated.` });
+      setDoNotCallCustomReason('');
+      addToast({ type: 'success', title: 'Blacklisted/Rejected marked', description: `${company} was updated.` });
     } catch {
-      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
+      addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: 'Please try again.' });
     } finally {
       setSavingDoNotCallId(null);
     }
-  }, [addToast, canManageDoNotCall, doNotCallReason, pendingDoNotCallContact, savingDoNotCallId]);
+  }, [addToast, canManageDoNotCall, doNotCallCustomReason, doNotCallReason, pendingDoNotCallContact, savingDoNotCallId]);
+
+  const handleConfirmBulkDoNotCall = useCallback(async () => {
+    const reason = bulkBlacklistReason === 'Other reasons' ? bulkBlacklistCustomReason.trim() : bulkBlacklistReason;
+    const contactIds = Array.from(selectedForBlacklist);
+    if (!canManageDoNotCall || contactIds.length === 0 || !reason.trim() || savingBulkBlacklist) return;
+    setSavingBulkBlacklist(true);
+    try {
+      const markedCount = await setDailyCallDoNotContactFlagsBulk(contactIds, reason, bulkBlacklistReason);
+      setMasterListRows(rows => rows.map(row => selectedForBlacklist.has(row.id)
+        ? { ...row, doNotContact: true, doNotContactReason: reason }
+        : row));
+      setSelectedForBlacklist(new Set());
+      setBulkBlacklistDialogOpen(false);
+      setBulkBlacklistReason('');
+      setBulkBlacklistCustomReason('');
+      addToast({ type: 'success', title: 'Blacklisted/Rejected applied', description: `${markedCount} customer${markedCount === 1 ? '' : 's'} updated.` });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: error instanceof Error ? error.message : 'Please try again.' });
+    } finally {
+      setSavingBulkBlacklist(false);
+    }
+  }, [addToast, bulkBlacklistCustomReason, bulkBlacklistReason, canManageDoNotCall, savingBulkBlacklist, selectedForBlacklist]);
 
   const handleMasterRowCall = useCallback((contact: Contact) => {
     handleOpenCallContact(contact);
@@ -2346,6 +2377,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         <span className="shrink-0 text-sm font-bold text-slate-500 dark:text-slate-400">{masterRows.length} {masterRows.length === 1 ? 'customer' : 'customers'}</span>
       </section>
 
+      {canManageDoNotCall && selectedForBlacklist.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30" aria-live="polite">
+          <span className="mr-auto text-sm font-semibold text-red-900 dark:text-red-100">{selectedForBlacklist.size} customer{selectedForBlacklist.size === 1 ? '' : 's'} selected</span>
+          <button type="button" onClick={() => setSelectedForBlacklist(new Set())} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue dark:border-slate-700 dark:text-slate-200">Clear selection</button>
+          <button type="button" onClick={() => setBulkBlacklistDialogOpen(true)} className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">Apply Blacklisted/Rejected</button>
+        </div>
+      )}
+
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Segregated customer category tables">
         {customerListSummaries.map((summary) => {
           const tone = summaryToneClasses[summary.tone];
@@ -2413,9 +2452,9 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                                   <span className="min-w-0">
                                     <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>{row.contact.company}</span>
-                                    {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
+                                    {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Blacklisted/Rejected`} className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-red-800">Blacklisted/Rejected</span>}
                                     <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">Assigned to {row.contact.salesman || 'Unassigned'}{row.contact.team ? ` · ${row.contact.team}` : ''}</span>
-                                    <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Do not contact</span>
+                                    <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Blacklisted/Rejected</span>
                                   </span>
                                   {canManageDoNotCall && masterListRows.some(item => item.id === row.contact.id) && (
                                     <button
@@ -2426,8 +2465,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                       }}
                                       disabled={savingDoNotCallId === row.contact.id}
                                       aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)}
-                                      aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`}
-                                      title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}
+                                      aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Blacklisted/Rejected`}
+                                      title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Blacklisted/Rejected' : 'Mark Blacklisted/Rejected'}
                                       className={`grid h-6 w-6 place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'border-red-500 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-700 dark:bg-red-950 dark:text-red-200'}`}
                                     >
                                       {savingDoNotCallId === row.contact.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <UserX className="h-3 w-3" aria-hidden="true" />}
@@ -2459,7 +2498,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
-                                {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 block w-fit rounded bg-red-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
+                                {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Blacklisted/Rejected`} className="mt-1 block w-fit rounded bg-red-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-red-800">Blacklisted/Rejected</span>}
                                 {row.contact.team && (
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
                                     Team: {row.contact.team}
@@ -2482,6 +2521,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                               </span>
                               <span className="col-start-2 flex flex-wrap items-center gap-1">
                                 {canManageDoNotCall && (
+                                  <label className="inline-flex h-6 w-6 items-center justify-center" onClick={(event) => event.stopPropagation()}>
+                                    <input type="checkbox" aria-label={`Select ${row.contact.company} for bulk Blacklisted/Rejected`} checked={selectedForBlacklist.has(row.contact.id)} onChange={(event) => setSelectedForBlacklist(current => {
+                                      const next = new Set(current);
+                                      if (event.target.checked) next.add(row.contact.id); else next.delete(row.contact.id);
+                                      return next;
+                                    })} className="h-4 w-4 rounded border-slate-300 text-red-700 focus:ring-red-500" />
+                                  </label>
+                                )}
+                                {canManageDoNotCall && (
                                   <button
                                     type="button"
                                     onClick={(event) => {
@@ -2490,8 +2538,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     }}
                                     disabled={savingDoNotCallId === row.contact.id}
                                     aria-pressed={Boolean(masterListRows.find(item => item.id === row.contact.id)?.doNotContact)}
-                                    aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Do Not Call`}
-                                    title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}
+                                    aria-label={`${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove' : 'Mark'} ${row.contact.company} Blacklisted/Rejected`}
+                                    title={masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'Remove Blacklisted/Rejected' : 'Mark Blacklisted/Rejected'}
                                     className={`grid h-6 w-6 place-items-center rounded-full border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-50 ${masterListRows.find(item => item.id === row.contact.id)?.doNotContact ? 'border-red-500 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-700 dark:bg-red-950 dark:text-red-200'}`}
                                   >
                                     {savingDoNotCallId === row.contact.id ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <UserX className="h-3 w-3" aria-hidden="true" />}
@@ -2594,7 +2642,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-base font-bold text-slate-800 dark:text-white">{selectedClient.company}</h3>
-                  {selectedClientDoNotCall && <span role="status" aria-label={`${selectedClient.company} Do Not Call`} className="inline-flex max-w-full break-words rounded bg-red-100 px-2 py-0.5 text-[10px] font-extrabold uppercase text-red-800">Do Not Call{selectedClientDoNotCallReason ? `: ${selectedClientDoNotCallReason}` : ''}</span>}
+                  {selectedClientDoNotCall && <span role="status" aria-label={`${selectedClient.company} Blacklisted/Rejected`} className="inline-flex max-w-full break-words rounded bg-red-100 px-2 py-0.5 text-[10px] font-extrabold uppercase text-red-800">Blacklisted/Rejected{selectedClientDoNotCallReason ? `: ${selectedClientDoNotCallReason}` : ''}</span>}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">{selectedClient.province}</p>
               </div>
@@ -2927,23 +2975,27 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
             className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
             onSubmit={(event) => { event.preventDefault(); void handleConfirmDoNotCall(); }}
           >
-            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-900 dark:text-white">Mark {pendingDoNotCallContact.company} as Do Not Call</h2>
+            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-900 dark:text-white">Mark {pendingDoNotCallContact.company} as Blacklisted/Rejected</h2>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Add a reason. Sales agents will see it on the customer profile.</p>
             <label htmlFor="do-not-call-reason" className="mt-4 block text-xs font-semibold text-slate-700 dark:text-slate-200">Reason</label>
-            <textarea
+            <select
               id="do-not-call-reason"
               value={doNotCallReason}
-              onChange={(event) => setDoNotCallReason(event.target.value)}
-              maxLength={500}
+              onChange={(event) => { setDoNotCallReason(event.target.value); setDoNotCallCustomReason(''); }}
               required
-              rows={3}
-              placeholder="e.g. not a real customer"
-              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-red-950"
-            />
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-red-950"
+            >
+              <option value="">Select a reason</option>
+              {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {doNotCallReason === 'Other reasons' && <>
+              <label htmlFor="do-not-call-custom-reason" className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-200">Custom reason</label>
+              <textarea id="do-not-call-custom-reason" value={doNotCallCustomReason} onChange={(event) => setDoNotCallCustomReason(event.target.value)} maxLength={500} required rows={3} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:focus:ring-red-950" />
+            </>}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setPendingDoNotCallContact(null); setDoNotCallReason(''); }}
+                onClick={() => { setPendingDoNotCallContact(null); setDoNotCallReason(''); setDoNotCallCustomReason(''); }}
                 disabled={savingDoNotCallId === pendingDoNotCallContact.id}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               >
@@ -2951,11 +3003,33 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
               </button>
               <button
                 type="submit"
-                disabled={!doNotCallReason.trim() || savingDoNotCallId !== null}
+                disabled={!doNotCallReason.trim() || (doNotCallReason === 'Other reasons' && !doNotCallCustomReason.trim()) || savingDoNotCallId !== null}
                 className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {savingDoNotCallId === pendingDoNotCallContact.id ? 'Saving…' : 'Mark Do Not Call'}
+                {savingDoNotCallId === pendingDoNotCallContact.id ? 'Saving…' : 'Mark Blacklisted/Rejected'}
               </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {bulkBlacklistDialogOpen && canManageDoNotCall && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+          <form role="dialog" aria-modal="true" aria-labelledby="bulk-blacklist-title" className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900" onSubmit={(event) => { event.preventDefault(); void handleConfirmBulkDoNotCall(); }}>
+            <h2 id="bulk-blacklist-title" className="text-base font-bold text-slate-900 dark:text-white">Apply Blacklisted/Rejected</h2>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Apply one reason to {selectedForBlacklist.size} selected customer{selectedForBlacklist.size === 1 ? '' : 's'}.</p>
+            <label htmlFor="bulk-blacklist-reason" className="mt-4 block text-xs font-semibold text-slate-700 dark:text-slate-200">Reason</label>
+            <select id="bulk-blacklist-reason" value={bulkBlacklistReason} onChange={(event) => { setBulkBlacklistReason(event.target.value); setBulkBlacklistCustomReason(''); }} required className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+              <option value="">Select a reason</option>
+              {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {bulkBlacklistReason === 'Other reasons' && <>
+              <label htmlFor="bulk-blacklist-custom-reason" className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-200">Custom reason</label>
+              <textarea id="bulk-blacklist-custom-reason" value={bulkBlacklistCustomReason} onChange={(event) => setBulkBlacklistCustomReason(event.target.value)} maxLength={500} required rows={3} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+            </>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" disabled={savingBulkBlacklist} onClick={() => setBulkBlacklistDialogOpen(false)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">Cancel</button>
+              <button type="submit" disabled={!bulkBlacklistReason || (bulkBlacklistReason === 'Other reasons' && !bulkBlacklistCustomReason.trim()) || savingBulkBlacklist} className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50">{savingBulkBlacklist ? 'Saving…' : 'Apply to selected customers'}</button>
             </div>
           </form>
         </div>

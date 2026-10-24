@@ -38,7 +38,9 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   inputClassName = '',
 }: CustomerAutocompleteProps<T>) => {
   const resolvedSelectedCustomer = selectedCustomer?.id ? selectedCustomer : null;
-  const [query, setQuery] = useState(resolvedSelectedCustomer?.company || '');
+  const selectedCustomerId = resolvedSelectedCustomer?.id || '';
+  const selectedCustomerCompany = resolvedSelectedCustomer?.company || '';
+  const [query, setQuery] = useState(selectedCustomerCompany);
   const [showDropdown, setShowDropdown] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
@@ -49,8 +51,8 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   const debouncedQuery = useDebounce(query, 250);
 
   useEffect(() => {
-    setQuery(resolvedSelectedCustomer?.company || '');
-  }, [resolvedSelectedCustomer]);
+    setQuery(selectedCustomerCompany);
+  }, [selectedCustomerId, selectedCustomerCompany]);
 
   const updatePosition = useCallback(() => {
     if (inputRef.current && showDropdown) {

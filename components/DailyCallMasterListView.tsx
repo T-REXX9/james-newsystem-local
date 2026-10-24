@@ -30,10 +30,10 @@ import { getVipTierConfig } from '../services/vipTierSettingsService';
 import { Contact, CustomerStatus, DailyCallCustomerRow, DailyCallMasterCustomerRow, DailyCallMasterListMeta, PendingDuplicateProspect, UserProfile, VipTierConfig } from '../types';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { resolveVipDiscountLevel } from '../utils/vipStanding';
-import { DO_NOT_CONTACT_LABEL, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
+import { DO_NOT_CONTACT_LABEL, DO_NOT_CONTACT_REASON_OPTIONS as BLACKLIST_REASON_OPTIONS, isBlockedDailyCallMasterRow } from '../utils/dailyCallBlockedCustomer';
 import { matchesDailyCallMonitorBucket, resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { resolveDailyCallPurchaseHighlightColor } from '../utils/dailyCallPurchaseHighlight';
-import { hasActionPermission, isMasterUserAccount } from '../constants';
+import { hasActionPermission, isMasterUserAccount, isMasterUserType } from '../constants';
 import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import { getUserFacingErrorMessage } from '../services/localApiAuth';
@@ -456,10 +456,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [doNotContactReason, setDoNotContactReason] = useState('');
   const [pendingDoNotCallRow, setPendingDoNotCallRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotCallReason, setDoNotCallReason] = useState('');
+  const [doNotCallReasonOption, setDoNotCallReasonOption] = useState('');
+  const [doNotCallCustomReason, setDoNotCallCustomReason] = useState('');
   const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [selectedDoNotCallIds, setSelectedDoNotCallIds] = useState<Set<string>>(() => new Set());
   const [showBulkDoNotCallModal, setShowBulkDoNotCallModal] = useState(false);
   const [bulkDoNotCallReason, setBulkDoNotCallReason] = useState('');
+  const [bulkDoNotCallReasonOption, setBulkDoNotCallReasonOption] = useState('');
+  const [bulkDoNotCallCustomReason, setBulkDoNotCallCustomReason] = useState('');
   const [savingBulkDoNotCall, setSavingBulkDoNotCall] = useState(false);
   const [selectedUnverifiedIds, setSelectedUnverifiedIds] = useState<Set<string>>(() => new Set());
   const [showBatchDoNotContactModal, setShowBatchDoNotContactModal] = useState(false);
@@ -548,8 +552,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
   }, [addToast, currentUser, savingStarId]);
 
-  const handleToggleDoNotCall = useCallback(async (row: DailyCallMasterCustomerRow, reason?: string) => {
-    if (!isMasterUserAccount(currentUser) || savingDoNotCallId) return;
+  const handleToggleDoNotCall = useCallback(async (row: DailyCallMasterCustomerRow, reason?: string, reasonOption?: string) => {
+    if (!isMasterUserType(currentUser) || savingDoNotCallId) return;
     if (row.doNotContact) {
       setSavingDoNotCallId(row.id);
       try {
@@ -557,9 +561,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         setRows((current) => current.map((item) => item.id === row.id
           ? { ...item, doNotContact: false, doNotContactReason: '' }
           : item));
-        addToast({ type: 'success', title: 'Do Not Call removed', description: `${row.shopName} was updated.` });
+        addToast({ type: 'success', title: 'Blacklisted/Rejected removed', description: `${row.shopName} was updated.` });
       } catch (error) {
-        addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
+        addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: getUserFacingErrorMessage(error, 'Please try again.') });
       } finally {
         setSavingDoNotCallId(null);
       }
@@ -568,37 +572,40 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     const cleanReason = reason?.trim() || '';
     if (!cleanReason) {
       setDoNotCallReason('');
+      setDoNotCallReasonOption('');
+      setDoNotCallCustomReason('');
       setPendingDoNotCallRow(row);
       return;
     }
     setSavingDoNotCallId(row.id);
     try {
-      await setDailyCallDoNotContactFlag(row.id, true, cleanReason);
+      await setDailyCallDoNotContactFlag(row.id, true, cleanReason, reasonOption);
       setRows((current) => current.map((item) => item.id === row.id
         ? { ...item, doNotContact: true, doNotContactReason: cleanReason }
         : item));
       setPendingDoNotCallRow(null);
       setDoNotCallReason('');
-      addToast({ type: 'success', title: 'Do Not Call marked', description: `${row.shopName} was updated.` });
+      addToast({ type: 'success', title: 'Blacklisted/Rejected marked', description: `${row.shopName} was updated.` });
     } catch (error) {
-      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
+      addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: getUserFacingErrorMessage(error, 'Please try again.') });
     } finally {
       setSavingDoNotCallId(null);
     }
   }, [addToast, currentUser, savingDoNotCallId]);
 
   const handleConfirmDoNotCall = useCallback(() => {
-    if (!pendingDoNotCallRow || !doNotCallReason.trim()) return;
-    void handleToggleDoNotCall(pendingDoNotCallRow, doNotCallReason);
-  }, [doNotCallReason, handleToggleDoNotCall, pendingDoNotCallRow]);
+    const reason = doNotCallReasonOption === 'Other reasons' ? doNotCallCustomReason.trim() : doNotCallReasonOption;
+    if (!pendingDoNotCallRow || !reason.trim()) return;
+    void handleToggleDoNotCall(pendingDoNotCallRow, reason, doNotCallReasonOption);
+  }, [doNotCallCustomReason, doNotCallReasonOption, handleToggleDoNotCall, pendingDoNotCallRow]);
 
   const handleConfirmBulkDoNotCall = useCallback(async () => {
-    const reason = bulkDoNotCallReason.trim();
+    const reason = bulkDoNotCallReasonOption === 'Other reasons' ? bulkDoNotCallCustomReason.trim() : bulkDoNotCallReasonOption;
     const selectedRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
-    if (!isMasterUserAccount(currentUser) || savingBulkDoNotCall || !reason || selectedRows.length === 0) return;
+    if (!isMasterUserType(currentUser) || savingBulkDoNotCall || !reason || selectedRows.length === 0) return;
     setSavingBulkDoNotCall(true);
     try {
-      const markedCount = await setDailyCallDoNotContactFlagsBulk(selectedRows.map((row) => row.id), reason);
+      const markedCount = await setDailyCallDoNotContactFlagsBulk(selectedRows.map((row) => row.id), reason, bulkDoNotCallReasonOption);
       const selectedIds = new Set(selectedRows.map((row) => row.id));
       setRows((current) => current.map((row) => selectedIds.has(row.id)
         ? { ...row, doNotContact: true, doNotContactReason: reason }
@@ -606,9 +613,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       setSelectedDoNotCallIds(new Set());
       setShowBulkDoNotCallModal(false);
       setBulkDoNotCallReason('');
+      setBulkDoNotCallReasonOption('');
+      setBulkDoNotCallCustomReason('');
       addToast({
         type: 'success',
-        title: 'Customers marked Do Not Call',
+        title: 'Blacklisted/Rejected applied',
         description: `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked with the shared reason.`,
       });
     } catch (error) {
@@ -616,7 +625,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setSavingBulkDoNotCall(false);
     }
-  }, [addToast, bulkDoNotCallReason, currentUser, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
+  }, [addToast, bulkDoNotCallCustomReason, bulkDoNotCallReasonOption, currentUser, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setDetailInitialTab(initialTab);
@@ -1066,7 +1075,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     week: unverifiedRows.filter((row) => row.createdAt && new Date(row.createdAt).getTime() >= startOfWeek).length,
     month: unverifiedRows.filter((row) => row.createdAt && new Date(row.createdAt).getTime() >= startOfMonth).length,
   };
-  const totalPotentialSales = summaryCategoryData.reduce((sum, category) => sum + category.potentialSales, 0);
+  const totalPotentialSales = summaryCategoryData
+    .filter((category) => category.id === 'priority' || category.id === 'recovery' || category.id === 'verified')
+    .reduce((sum, category) => sum + category.potentialSales, 0);
 
   const amountToNextVip = (row: DailyCallMasterCustomerRow) => {
     const current = getCurrentVip(row);
@@ -1485,7 +1496,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs text-slate-600">
         <p data-testid="potential-sales-formula">
-          Potential Sales = Priority avg monthly (last 12 months) + Recovery avg monthly (last 12 active months) + Blacklisted avg monthly (same as Recovery) + ₱5,000 per verified prospect. Unverified prospects are ₱0.
+          Total Potential Sales = Priority monthly sales potential + Recovery monthly sales potential + Verified prospect monthly sales potential.
         </p>
         <p className="font-bold text-blue-900" data-testid="total-potential-sales">
           Total Potential Sales: {compactPeso.format(totalPotentialSales)}
@@ -1723,14 +1734,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <XCircle className="h-4 w-4" />
                     Blacklist / Reject selected
                   </button>}
-                  {selectedDoNotCallRows.length > 0 && <button
+                {selectedDoNotCallRows.length > 0 && isMasterUserType(currentUser) && <button
                     type="button"
                     onClick={() => { setBulkDoNotCallReason(''); setShowBulkDoNotCallModal(true); }}
                     disabled={selectedDoNotCallRows.length === 0 || savingBulkDoNotCall}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <UserX className="h-4 w-4" aria-hidden="true" />
-                    Do Not Call
+                    Blacklisted/Rejected
                   </button>}
                 </div>
               </div>
@@ -1904,7 +1915,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           ) : (
                             <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           )}
-                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Do Not Call</span>}
+                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Blacklisted/Rejected`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Blacklisted/Rejected</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed
@@ -2020,18 +2031,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                         </td>
                         <td className="w-[240px] px-2 py-2.5">
                           <div className="flex w-full flex-nowrap items-center justify-center gap-1.5">
-                            {isMasterUserAccount(currentUser) && !row.dataIntegrityException && (
+                            {isMasterUserType(currentUser) && !row.dataIntegrityException && (
                               <button
                                 type="button"
-                                aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Do Not Call`}
+                                aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Blacklisted/Rejected`}
                                 aria-pressed={Boolean(row.doNotContact)}
-                                title={row.doNotContact ? 'Remove Do Not Call mark' : 'Mark Do Not Call'}
+                                title={row.doNotContact ? 'Remove Blacklisted/Rejected mark' : 'Mark Blacklisted/Rejected'}
                                 onClick={() => void handleToggleDoNotCall(row)}
                                 disabled={savingDoNotCallId === row.id}
                                 className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 ${row.doNotContact ? 'border-red-600 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'}`}
                               >
                                 {savingDoNotCallId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <UserX className="h-3.5 w-3.5" aria-hidden="true" />}
-                                <span>{row.doNotContact ? 'Remove DNC' : 'Mark DNC'}</span>
+                                <span>{row.doNotContact ? 'Remove Blacklisted/Rejected' : 'Mark Blacklisted/Rejected'}</span>
                               </button>
                             )}
                             {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
@@ -2195,7 +2206,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         </div>
       )}
 
-      {showBulkDoNotCallModal && isMasterUserAccount(currentUser) && (
+      {showBulkDoNotCallModal && isMasterUserType(currentUser) && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
           <form
             role="dialog"
@@ -2204,37 +2215,41 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
             onSubmit={(event) => { event.preventDefault(); void handleConfirmBulkDoNotCall(); }}
           >
-            <h2 id="bulk-do-not-call-title" className="text-base font-bold text-slate-950">Mark {selectedDoNotCallRows.length} customers as Do Not Call</h2>
+            <h2 id="bulk-do-not-call-title" className="text-base font-bold text-slate-950">Apply Blacklisted/Rejected to {selectedDoNotCallRows.length} customers</h2>
             <p className="mt-1 text-sm text-slate-600">This shared reason will appear on each customer profile.</p>
             <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="bulk-do-not-call-reason">Shared reason</label>
-            <textarea
+            <select
               id="bulk-do-not-call-reason"
-              value={bulkDoNotCallReason}
-              onChange={(event) => setBulkDoNotCallReason(event.target.value)}
-              maxLength={500}
+              value={bulkDoNotCallReasonOption}
+              onChange={(event) => { setBulkDoNotCallReasonOption(event.target.value); setBulkDoNotCallReason(''); setBulkDoNotCallCustomReason(''); }}
               required
-              rows={3}
-              placeholder="e.g. not a real customer"
-              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
-            />
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            >
+              <option value="">Select a reason</option>
+              {BLACKLIST_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {bulkDoNotCallReasonOption === 'Other reasons' && <>
+              <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="bulk-do-not-call-custom-reason">Custom reason</label>
+              <textarea id="bulk-do-not-call-custom-reason" value={bulkDoNotCallCustomReason} onChange={(event) => setBulkDoNotCallCustomReason(event.target.value)} maxLength={500} required rows={3} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
+            </>}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setShowBulkDoNotCallModal(false); setBulkDoNotCallReason(''); }}
+                onClick={() => { setShowBulkDoNotCallModal(false); setBulkDoNotCallReason(''); setBulkDoNotCallReasonOption(''); setBulkDoNotCallCustomReason(''); }}
                 disabled={savingBulkDoNotCall}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
               >Cancel</button>
               <button
                 type="submit"
-                disabled={!bulkDoNotCallReason.trim() || savingBulkDoNotCall || selectedDoNotCallRows.length === 0}
+                disabled={!bulkDoNotCallReasonOption || (bulkDoNotCallReasonOption === 'Other reasons' && !bulkDoNotCallCustomReason.trim()) || savingBulkDoNotCall || selectedDoNotCallRows.length === 0}
                 className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >{savingBulkDoNotCall ? 'Saving…' : `Mark ${selectedDoNotCallRows.length} customers`}</button>
+              >{savingBulkDoNotCall ? 'Saving…' : `Apply to ${selectedDoNotCallRows.length} customers`}</button>
             </div>
           </form>
         </div>
       )}
 
-      {pendingDoNotCallRow && isMasterUserAccount(currentUser) && (
+      {pendingDoNotCallRow && isMasterUserType(currentUser) && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
           <form
             role="dialog"
@@ -2243,31 +2258,35 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
             onSubmit={(event) => { event.preventDefault(); handleConfirmDoNotCall(); }}
           >
-            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-950">Mark {pendingDoNotCallRow.shopName} as Do Not Call</h2>
+            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-950">Mark {pendingDoNotCallRow.shopName} as Blacklisted/Rejected</h2>
             <p className="mt-1 text-sm text-slate-600">Add a reason. Sales agents will see it on the customer profile.</p>
             <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-call-reason">Reason</label>
-            <textarea
+            <select
               id="do-not-call-reason"
-              value={doNotCallReason}
-              onChange={(event) => setDoNotCallReason(event.target.value)}
-              maxLength={500}
+              value={doNotCallReasonOption}
+              onChange={(event) => { setDoNotCallReasonOption(event.target.value); setDoNotCallReason(''); setDoNotCallCustomReason(''); }}
               required
-              rows={3}
-              placeholder="e.g. not a real customer"
-              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
-            />
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            >
+              <option value="">Select a reason</option>
+              {BLACKLIST_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            {doNotCallReasonOption === 'Other reasons' && <>
+              <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="do-not-call-custom-reason">Custom reason</label>
+              <textarea id="do-not-call-custom-reason" value={doNotCallCustomReason} onChange={(event) => setDoNotCallCustomReason(event.target.value)} maxLength={500} required rows={3} className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
+            </>}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setPendingDoNotCallRow(null); setDoNotCallReason(''); }}
+                onClick={() => { setPendingDoNotCallRow(null); setDoNotCallReason(''); setDoNotCallReasonOption(''); setDoNotCallCustomReason(''); }}
                 disabled={savingDoNotCallId === pendingDoNotCallRow.id}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
               >Cancel</button>
               <button
                 type="submit"
-                disabled={!doNotCallReason.trim() || savingDoNotCallId !== null}
+                disabled={!doNotCallReasonOption || (doNotCallReasonOption === 'Other reasons' && !doNotCallCustomReason.trim()) || savingDoNotCallId !== null}
                 className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >{savingDoNotCallId === pendingDoNotCallRow.id ? 'Saving…' : 'Mark Do Not Call'}</button>
+              >{savingDoNotCallId === pendingDoNotCallRow.id ? 'Saving…' : 'Mark Blacklisted/Rejected'}</button>
             </div>
           </form>
         </div>

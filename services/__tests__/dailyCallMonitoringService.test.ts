@@ -26,13 +26,13 @@ describe('dailyCallMonitoringService', () => {
     vi.useRealTimers();
   });
 
-  it('submits a shared reason and all selected IDs to the bulk Do Not Call endpoint', async () => {
+  it('submits a shared allowed reason and all selected IDs to the bulk Blacklisted/Rejected endpoint', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ data: { marked_count: 2 } }),
     } as Response);
 
-    const markedCount = await setDailyCallDoNotContactFlagsBulk(['customer-1', 'customer-2'], 'not a real customer');
+    const markedCount = await setDailyCallDoNotContactFlagsBulk(['customer-1', 'customer-2'], 'Not interested', 'Not interested');
 
     expect(markedCount).toBe(2);
     expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/do-not-contact-flags/bulk');
@@ -40,7 +40,23 @@ describe('dailyCallMonitoringService', () => {
     expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
       main_id: 1,
       contact_ids: ['customer-1', 'customer-2'],
-      reason: 'not a real customer',
+      reason: 'Not interested',
+      reason_option: 'Not interested',
+    });
+  });
+
+  it('submits custom bulk reasons with the Other reasons option', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { marked_count: 10 } }),
+    } as Response);
+
+    await setDailyCallDoNotContactFlagsBulk(Array.from({ length: 10 }, (_, index) => `customer-${index + 1}`), 'Unable to reach by phone', 'Other reasons');
+
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toMatchObject({
+      contact_ids: Array.from({ length: 10 }, (_, index) => `customer-${index + 1}`),
+      reason: 'Unable to reach by phone',
+      reason_option: 'Other reasons',
     });
   });
 

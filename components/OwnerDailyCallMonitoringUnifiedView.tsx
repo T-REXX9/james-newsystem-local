@@ -37,11 +37,9 @@ const peso = new Intl.NumberFormat('en-PH', {
 const calculateSummary = (rows: DailyCallMasterCustomerRow[]) => {
   const priority = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'priority'));
   const recovery = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'recovery'));
-  const blocked = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'blocked'));
   const verified = rows.filter((row) => matchesDailyCallMonitorBucket(row, 'verified'));
   const totalPotential = priority.reduce((sum, row) => sum + row.averageMonthlySales, 0)
     + recovery.reduce((sum, row) => sum + row.averageMonthlySales, 0)
-    + blocked.reduce((sum, row) => sum + row.averageMonthlySales, 0)
     + (verified.length * VERIFIED_PROSPECT_POTENTIAL);
 
   return { totalPotential };

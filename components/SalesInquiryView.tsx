@@ -23,6 +23,8 @@ import ModuleRecordLink from './ModuleRecordLink';
 import ModuleRecordAction from './ModuleRecordAction';
 import { navigateWorkflow } from '../utils/workflowNavigate';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
+import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
+import { resolveDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import { customerLedgerService } from '../services/customerLedgerService';
 import { getLocalAuthSession } from '../services/localAuthService';
 import { getVipTierConfig } from '../services/vipTierSettingsService';
@@ -273,10 +275,24 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const loadCustomers = useCallback(async () => {
     try {
-      // Sales Inquiry only needs customer picker fields. Avoid loading the full
-      // Customer Database payload and its Daily Call classification query here.
       const rows = await fetchContacts({ lightweight: true });
-      setCustomers(rows);
+      let dailyCallMasterList;
+      try {
+        dailyCallMasterList = await fetchDailyCallMasterList();
+      } catch (error) {
+        console.error('Failed loading Daily Call customer eligibility:', error);
+        setCustomers(rows);
+        return;
+      }
+      const eligibleCustomerIds = new Set(
+        dailyCallMasterList.items
+          .filter((row) => {
+            const bucket = resolveDailyCallMonitorBucket(row);
+            return bucket === 'priority' || bucket === 'recovery' || bucket === 'verified';
+          })
+          .map((row) => row.id)
+      );
+      setCustomers(rows.filter((customer) => eligibleCustomerIds.has(customer.id)));
     } catch (error) {
       console.error('Failed loading customers:', error);
       setCustomers([]);

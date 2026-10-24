@@ -591,20 +591,20 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
   };
 };
 
-export const setDailyCallDoNotContactFlag = async (contactId: string, marked: boolean, reason = ''): Promise<boolean> => {
+export const setDailyCallDoNotContactFlag = async (contactId: string, marked: boolean, reason = '', reasonOption = reason): Promise<boolean> => {
   const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/do-not-contact-flag`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked, reason }),
+    body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked, reason, reason_option: reasonOption }),
   });
   return Boolean(payload?.data?.marked);
 };
 
-export const setDailyCallDoNotContactFlagsBulk = async (contactIds: string[], reason: string): Promise<number> => {
+export const setDailyCallDoNotContactFlagsBulk = async (contactIds: string[], reason: string, reasonOption = reason): Promise<number> => {
   const payload = await requestJson(`${API_BASE_URL}/daily-call-monitoring/do-not-contact-flags/bulk`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ main_id: resolveMainId(), contact_ids: contactIds, reason }),
+    body: JSON.stringify({ main_id: resolveMainId(), contact_ids: contactIds, reason, reason_option: reasonOption }),
   });
   return Number(payload?.data?.marked_count ?? 0);
 };
