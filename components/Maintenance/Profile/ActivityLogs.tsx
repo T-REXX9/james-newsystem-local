@@ -73,6 +73,7 @@ interface ActivityLogsProps {
 export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom, initialDateTo }: ActivityLogsProps) {
   const [logs, setLogs] = useState<ActivityLogRecord[]>([]);
   const [users, setUsers] = useState<ActivityLogUser[]>([]);
+  const [modules, setModules] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -80,6 +81,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [userId, setUserId] = useState('All');
   const [action, setAction] = useState('All');
+  const [module, setModule] = useState('All');
   const [dateFrom, setDateFrom] = useState(initialDateFrom || '');
   const [dateTo, setDateTo] = useState(initialDateTo || '');
 
@@ -111,6 +113,14 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
     }
   };
 
+  const loadModules = async () => {
+    try {
+      setModules(await activityLogsLocalApiService.modules());
+    } catch {
+      setModules([]);
+    }
+  };
+
   const fetchLogs = async () => {
     setLoading(true);
     setError('');
@@ -119,6 +129,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
         search: debouncedSearch || undefined,
         userId: userId !== 'All' ? userId : undefined,
         action: action !== 'All' ? action : undefined,
+        module: module !== 'All' ? module : undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         page,
@@ -149,11 +160,12 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
 
   useEffect(() => {
     loadUsers();
+    loadModules();
   }, []);
 
   useEffect(() => {
     fetchLogs();
-  }, [debouncedSearch, userId, action, dateFrom, dateTo, page]);
+  }, [debouncedSearch, userId, action, module, dateFrom, dateTo, page]);
 
   const userNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -187,7 +199,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
       </div>
 
       <div className="p-6 flex-1 overflow-hidden flex flex-col gap-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
           <div className="relative md:col-span-2 xl:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
@@ -210,12 +222,22 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
             }}
             className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
           >
-            <option value="All">All Users</option>
+            <option value="All">All Staff</option>
             {users.map((user) => (
               <option key={user.user_id} value={user.user_id}>
                 {`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.user_id}
               </option>
             ))}
+          </select>
+
+          <select
+            aria-label="Filter by module"
+            value={module}
+            onChange={(e) => { setModule(e.target.value); setPage(1); }}
+            className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+          >
+            <option value="All">All Modules</option>
+            {modules.map((moduleName) => <option key={moduleName} value={moduleName}>{moduleName}</option>)}
           </select>
 
           <select

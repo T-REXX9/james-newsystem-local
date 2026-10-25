@@ -153,6 +153,7 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('(20/07/2026)')).toBeInTheDocument();
     const productTable = screen.getByText('Specifications').closest('table');
     expect(productTable).toHaveClass('w-full', 'table-fixed');
+    expect(within(productTable!).getByText('ISUZU 10PD1, 8PC, 8PD1, 8PC1')).toBeInTheDocument();
     expect(productTable).toHaveClass('text-[clamp(8px,0.72vw,12px)]');
     expect(productTable).not.toHaveClass('min-w-[1900px]');
     expect(productTable?.parentElement).toHaveClass('overflow-y-auto', 'overflow-x-hidden');
@@ -188,8 +189,9 @@ describe('ProductDatabase', () => {
     const productTable = screen.getByText('Specifications').closest('table');
     const columns = productTable?.querySelectorAll('col');
 
-    expect(columns).toHaveLength(22);
-    expect(columns?.[18]).toHaveStyle({ width: '8.6%' });
+    expect(columns).toHaveLength(23);
+    expect(columns?.[6]).toHaveStyle({ width: '6%' });
+    expect(columns?.[19]).toHaveStyle({ width: '8.084%' });
   });
 
   it('opens the matching 12-month incident and return reports in new tabs', async () => {

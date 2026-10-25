@@ -107,6 +107,7 @@ export const activityLogsLocalApiService = {
     search?: string;
     userId?: string;
     action?: string;
+    module?: string;
     dateFrom?: string;
     dateTo?: string;
     page?: number;
@@ -122,6 +123,7 @@ export const activityLogsLocalApiService = {
     if (params?.search) query.set('search', params.search);
     if (params?.userId) query.set('user_id', params.userId);
     if (params?.action) query.set('action', params.action);
+    if (params?.module) query.set('module', params.module);
     if (params?.dateFrom) query.set('date_from', params.dateFrom);
     if (params?.dateTo) query.set('date_to', params.dateTo);
 
@@ -148,6 +150,11 @@ export const activityLogsLocalApiService = {
       first_name: String(row?.first_name || ''),
       last_name: String(row?.last_name || ''),
     })).filter((row: ActivityLogUser) => row.user_id !== '');
+  },
+
+  async modules(): Promise<string[]> {
+    const data = await requestApi(`${API_BASE_URL}/activity-logs/modules?main_id=${encodeURIComponent(String(getMainId()))}`);
+    return Array.isArray(data?.items) ? data.items.map((module: unknown) => String(module || '')).filter(Boolean) : [];
   },
 
   async deletionDetail(auditId: number): Promise<ActivityLogRecord> {

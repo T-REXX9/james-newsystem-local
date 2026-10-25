@@ -13,6 +13,8 @@ const fetchDailyCallSalesColorBreakdownMock = vi.fn().mockResolvedValue({
     purple: { customer_count: 0, sales: 0 }, white: { customer_count: 0, sales: 0 }, red: { customer_count: 0, sales: 0 },
   } },
 });
+const fetchDailyCallMonthlyTargetMock = vi.fn().mockResolvedValue(3000000);
+const saveDailyCallMonthlyTargetMock = vi.fn();
 
 vi.mock('../DailyCallMasterListView', () => ({
   default: () => <div data-testid="master-list-view">Master List View</div>,
@@ -31,12 +33,19 @@ vi.mock('../../services/salesReportService', () => ({
   getSalesReportData: (...args: unknown[]) => getSalesReportDataMock(...args),
 }));
 
+vi.mock('../../services/dailyCallTargetService', () => ({
+  fetchDailyCallMonthlyTarget: (...args: unknown[]) => fetchDailyCallMonthlyTargetMock(...args),
+  saveDailyCallMonthlyTarget: (...args: unknown[]) => saveDailyCallMonthlyTargetMock(...args),
+}));
+
 describe('OwnerDailyCallMonitoringUnifiedView', () => {
   afterEach(() => {
     cleanup();
     getSalesReportDataMock.mockReset();
     fetchDailyCallMasterListMock.mockClear();
     fetchDailyCallSalesColorBreakdownMock.mockClear();
+    fetchDailyCallMonthlyTargetMock.mockReset().mockResolvedValue(3000000);
+    saveDailyCallMonthlyTargetMock.mockReset();
   });
 
   it('renders the Daily Call Monitoring master list by default', () => {
@@ -44,6 +53,8 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     render(<OwnerDailyCallMonitoringUnifiedView currentUser={null} />);
 
     expect(screen.getByTestId('master-list-view')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /edit my quota/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/my quota:/i)).not.toBeInTheDocument();
     expect(screen.queryByText('Team sales by Daily Call status')).not.toBeInTheDocument();
     expect(fetchDailyCallSalesColorBreakdownMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /purchase follow-up/i })).not.toBeInTheDocument();
@@ -78,6 +89,31 @@ describe('OwnerDailyCallMonitoringUnifiedView', () => {
     expect(await screen.findByText('₱45,678')).toBeInTheDocument();
     expect(getSalesReportDataMock).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'all' }));
     expect(fetchDailyCallMasterListMock).toHaveBeenCalledWith({ fromDate: '2025-10-01' });
+  });
+
+  it('lets a Master User save the monthly target and applies it to every target metric', async () => {
+    const user = userEvent.setup();
+    getSalesReportDataMock.mockResolvedValue({ summary: { grandTotal: { total: 45678 } } });
+    fetchDailyCallMasterListMock.mockResolvedValue({ items: [] });
+    saveDailyCallMonthlyTargetMock.mockResolvedValue(2500000);
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', role: 'Owner', user_type: '1' } as any} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Edit monthly target' }));
+    await user.clear(screen.getByRole('spinbutton', { name: 'Monthly target (PHP)' }));
+    await user.type(screen.getByRole('spinbutton', { name: 'Monthly target (PHP)' }), '2500000');
+    await user.click(screen.getByRole('button', { name: 'Save target' }));
+
+    expect(saveDailyCallMonthlyTargetMock).toHaveBeenCalledWith(2500000);
+    expect(await screen.findByText('Monthly target saved.')).toBeInTheDocument();
+    expect(screen.getByText('₱2,500,000')).toBeInTheDocument();
+    expect(screen.getByText('₱2,454,322')).toBeInTheDocument();
+    expect(screen.getByText('0.00%')).toBeInTheDocument();
+
+    cleanup();
+    fetchDailyCallMonthlyTargetMock.mockResolvedValue(2500000);
+    render(<OwnerDailyCallMonitoringUnifiedView currentUser={{ id: '1', role: 'Owner', user_type: '1' } as any} />);
+    expect(await screen.findByText('₱2,500,000')).toBeInTheDocument();
+    expect(screen.getByText('₱2,454,322')).toBeInTheDocument();
   });
 
   it('opens the month sales breakdown with ranked agents, customers, and products', async () => {

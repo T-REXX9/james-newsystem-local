@@ -4,12 +4,12 @@ import { VERIFIED_PROSPECT_POTENTIAL } from '../utils/dailyCallPotentialSales';
 import { matchesDailyCallMonitorBucket } from '../utils/dailyCallListCategory';
 import DailyCallMasterListView from './DailyCallMasterListView';
 import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
-import PersonalSalesQuotaEditor from './PersonalSalesQuotaEditor';
 import { fetchDailyCallMasterList } from '../services/dailyCallMonitoringService';
 import { getSalesReportData } from '../services/salesReportService';
 import { DailyCallMasterCustomerRow, SalesReportData, UserProfile } from '../types';
-import { isMasterUserAccount } from '../constants';
+import { isMasterUserAccount, isMasterUserType } from '../constants';
 import ApprovalRequestsView from './ApprovalRequestsView';
+import { fetchDailyCallMonthlyTarget, saveDailyCallMonthlyTarget } from '../services/dailyCallTargetService';
 
 interface OwnerDailyCallMonitoringUnifiedViewProps {
   currentUser: UserProfile | null;
@@ -25,7 +25,7 @@ interface LocalErrorBoundaryState {
 }
 
 const fromDate = '2025-10-01';
-const monthlyTarget = 3_000_000;
+const DEFAULT_MONTHLY_TARGET = 3_000_000;
 const DAILY_CALL_WORKSPACE_HISTORY_KEY = '__jamesDailyCallWorkspace';
 
 const peso = new Intl.NumberFormat('en-PH', {
@@ -213,11 +213,56 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
   });
   const ownsApprovalsHistoryEntry = useRef(activeWorkspace === 'approvals');
   const canReviewCustomerRequests = isMasterUserAccount(currentUser);
+  const canEditMonthlyTarget = isMasterUserType(currentUser);
   const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
   const [salesReport, setSalesReport] = useState<SalesReportData | null>(null);
+  const [monthlyTarget, setMonthlyTarget] = useState(DEFAULT_MONTHLY_TARGET);
+  const [isEditingMonthlyTarget, setIsEditingMonthlyTarget] = useState(false);
+  const [monthlyTargetDraft, setMonthlyTargetDraft] = useState(String(DEFAULT_MONTHLY_TARGET));
+  const [isSavingMonthlyTarget, setIsSavingMonthlyTarget] = useState(false);
+  const [monthlyTargetMessage, setMonthlyTargetMessage] = useState('');
+  const [monthlyTargetError, setMonthlyTargetError] = useState('');
   const [isSalesBreakdownOpen, setIsSalesBreakdownOpen] = useState(false);
   const monthRange = useMemo(currentMonthRange, []);
   const closeSalesBreakdown = useCallback(() => setIsSalesBreakdownOpen(false), []);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchDailyCallMonthlyTarget()
+      .then((target) => {
+        if (!isMounted) return;
+        setMonthlyTarget(target);
+        setMonthlyTargetDraft(String(target));
+      })
+      .catch((error: unknown) => {
+        if (isMounted) setMonthlyTargetError(error instanceof Error ? error.message : 'Unable to load the saved monthly target.');
+      });
+    return () => { isMounted = false; };
+  }, []);
+
+  const handleSaveMonthlyTarget = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = Number(monthlyTargetDraft);
+    if (!Number.isSafeInteger(value) || value < 0 || value > 2_147_483_647) {
+      setMonthlyTargetError('Enter a whole peso amount from ₱0 to ₱2,147,483,647.');
+      return;
+    }
+
+    setIsSavingMonthlyTarget(true);
+    setMonthlyTargetError('');
+    setMonthlyTargetMessage('');
+    try {
+      const savedTarget = await saveDailyCallMonthlyTarget(value);
+      setMonthlyTarget(savedTarget);
+      setMonthlyTargetDraft(String(savedTarget));
+      setIsEditingMonthlyTarget(false);
+      setMonthlyTargetMessage('Monthly target saved.');
+    } catch (error) {
+      setMonthlyTargetError(error instanceof Error ? error.message : 'Unable to save the monthly target.');
+    } finally {
+      setIsSavingMonthlyTarget(false);
+    }
+  };
 
   const openApprovalsWorkspace = () => {
     if (activeWorkspace === 'approvals') return;
@@ -330,7 +375,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
         iconClass: 'text-blue-700',
       },
     ];
-  }, [summary]);
+  }, [summary, monthlyTarget]);
 
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -368,7 +413,45 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-3">
                   <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-100">Quick Summary (MTD)</h3>
-                  <PersonalSalesQuotaEditor quota={Number(currentUser?.monthly_quota || 0)} />
+                  {canEditMonthlyTarget && (
+                    <div className="min-w-0">
+                      {!isEditingMonthlyTarget ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMonthlyTargetDraft(String(monthlyTarget));
+                            setMonthlyTargetError('');
+                            setMonthlyTargetMessage('');
+                            setIsEditingMonthlyTarget(true);
+                          }}
+                          className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-emerald-800 dark:bg-slate-900 dark:text-emerald-200 dark:hover:bg-slate-800"
+                        >
+                          Edit monthly target
+                        </button>
+                      ) : (
+                        <form onSubmit={handleSaveMonthlyTarget} className="flex flex-wrap items-end gap-2">
+                          <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                            Monthly target (PHP)
+                            <input
+                              aria-label="Monthly target (PHP)"
+                              type="number"
+                              min="0"
+                              max="2147483647"
+                              step="1"
+                              required
+                              value={monthlyTargetDraft}
+                              onChange={(event) => setMonthlyTargetDraft(event.target.value)}
+                              className="mt-1 block h-9 w-36 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                            />
+                          </label>
+                          <button type="submit" disabled={isSavingMonthlyTarget} className="h-9 rounded-md bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-wait disabled:opacity-60">{isSavingMonthlyTarget ? 'Saving…' : 'Save target'}</button>
+                          <button type="button" disabled={isSavingMonthlyTarget} onClick={() => { setIsEditingMonthlyTarget(false); setMonthlyTargetDraft(String(monthlyTarget)); setMonthlyTargetError(''); }} className="h-9 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:opacity-60 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Cancel</button>
+                        </form>
+                      )}
+                      {monthlyTargetError && <p role="alert" className="mt-1 text-xs text-red-700 dark:text-red-300">{monthlyTargetError}</p>}
+                      {monthlyTargetMessage && <p role="status" className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">{monthlyTargetMessage}</p>}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
