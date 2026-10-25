@@ -111,7 +111,7 @@ export const getSalesReportData = async (
       date_from: filters.dateFrom,
       date_to: filters.dateTo,
       customer_id: filters.customerId,
-      limit: '2500',
+      limit: '5000',
     });
     if (filters.agentId) query.set('agent_id', filters.agentId);
 
@@ -130,6 +130,8 @@ export const getSalesReportData = async (
       reportAmount: toNumber(tx?.report_amount, toNumber(tx?.so_amount)),
       drAmount: toNumber(tx?.dr_amount),
       invoiceAmount: toNumber(tx?.invoice_amount),
+      grossInvoiceAmount: toNumber(tx?.gross_invoice_amount, toNumber(tx?.invoice_amount)),
+      vipDiscountAmount: toNumber(tx?.vip_discount_amount),
       reportInvoiceAmount: toNumber(tx?.report_invoice_amount, toNumber(tx?.invoice_amount)),
       salesperson: String(tx?.salesperson || 'Unassigned'),
       currentAgentId: String(tx?.current_agent_id || ''),

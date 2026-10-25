@@ -169,7 +169,7 @@ describe('CustomerLedgerView', () => {
 
     render(<CustomerLedgerView />);
 
-    await waitFor(() => expect(mockGetCustomers).toHaveBeenCalledWith(''));
+    await waitFor(() => expect(mockGetCustomers).toHaveBeenCalledWith('', true));
     expect(screen.queryByRole('option', { name: /Unnamed customer/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('option', { name: '152021011303113643901' })).not.toBeInTheDocument();
   });
@@ -177,12 +177,12 @@ describe('CustomerLedgerView', () => {
   it('calls getCustomers with debounced search term', async () => {
     const user = userEvent.setup();
     render(<CustomerLedgerView />);
-    await waitFor(() => expect(mockGetCustomers).toHaveBeenCalledWith(''));
+    await waitFor(() => expect(mockGetCustomers).toHaveBeenCalledWith('', true));
     mockGetCustomers.mockClear();
     const input = screen.getByPlaceholderText('Search customer...');
     await user.type(input, 'Alpha');
     await waitFor(
-      () => expect(mockGetCustomers).toHaveBeenCalledWith('Alpha'),
+      () => expect(mockGetCustomers).toHaveBeenCalledWith('Alpha', true),
       { timeout: 2000 },
     );
   });
@@ -207,7 +207,7 @@ describe('CustomerLedgerView', () => {
     await user.type(input, 'Beta');
 
     await waitFor(
-      () => expect(mockGetCustomers).toHaveBeenCalledWith('Beta'),
+      () => expect(mockGetCustomers).toHaveBeenCalledWith('Beta', true),
       { timeout: 2000 },
     );
 
@@ -226,7 +226,7 @@ describe('CustomerLedgerView', () => {
     await user.type(screen.getByPlaceholderText('Search customer...'), 'Missing');
 
     await waitFor(
-      () => expect(mockGetCustomers).toHaveBeenCalledWith('Missing'),
+      () => expect(mockGetCustomers).toHaveBeenCalledWith('Missing', true),
       { timeout: 2000 },
     );
     expect(screen.getByRole('option', { name: /Alpha Corp/i })).toHaveAttribute('aria-selected', 'true');

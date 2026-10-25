@@ -48,6 +48,17 @@ type LedgerDocumentLink = {
 };
 
 const getLedgerDocumentLink = (row: CustomerLedgerResponse['rows'][number]): LedgerDocumentLink | null => {
+  const unpostedSalesOrderId = String(row.unposted_sales_order_id || '').trim();
+  if (unpostedSalesOrderId) {
+    const salesOrderNo = String(row.unposted_sales_order_no || '').trim() || unpostedSalesOrderId;
+    return {
+      tab: 'sales-transaction-sales-order',
+      payload: { orderId: unpostedSalesOrderId },
+      label: 'Sales Order (not invoiced)',
+      displayReference: salesOrderNo,
+    };
+  }
+
   const reference = String(row.ref_no || '').trim();
   const normalizedType = row.ref_type.trim().toLowerCase().replace(/_/g, ' ');
   const displayReference = String(
@@ -306,14 +317,21 @@ const DetailedTable: React.FC<{ data: CustomerLedgerResponse }> = ({ data }) => 
               const documentLink = getLedgerDocumentLink(row);
               if (!documentLink) return row.reference || row.ref_no || '-';
               return (
-                <ModuleRecordLink
-                  tab={documentLink.tab}
-                  payload={documentLink.payload}
-                  className="rounded-sm font-semibold text-brand-blue underline decoration-dotted underline-offset-2 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-                  aria-label={`Open ${documentLink.label} ${documentLink.displayReference}`}
-                >
-                  {documentLink.displayReference}
-                </ModuleRecordLink>
+                <span>
+                  <ModuleRecordLink
+                    tab={documentLink.tab}
+                    payload={documentLink.payload}
+                    className="rounded-sm font-semibold text-brand-blue underline decoration-dotted underline-offset-2 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+                    aria-label={`Open ${documentLink.label} ${documentLink.displayReference}`}
+                  >
+                    {documentLink.displayReference}
+                  </ModuleRecordLink>
+                  {row.unposted_sales_order_id && (
+                    <span className="block text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                      No posted invoice/DR
+                    </span>
+                  )}
+                </span>
               );
             })()}
           </td>
@@ -503,6 +521,8 @@ const LedgerReport: React.FC<{
     if (!ledgerData) return;
     customerLedgerService.exportLedgerCsv(ledgerData);
   };
+  const ledgerMonthlySales = ledgerData?.metrics.ledger_monthly_sales ?? ledgerData?.metrics.monthly_sales ?? 0;
+  const ledgerSalesDifference = ledgerMonthlySales - (ledgerData?.metrics.monthly_sales ?? 0);
 
   return (
     <div className="h-full overflow-auto" data-testid="ledger-report-scroll">
@@ -618,6 +638,18 @@ const LedgerReport: React.FC<{
               />
             </div>
           </div>
+          {ledgerData && Math.abs(ledgerSalesDifference) > 0.01 && (
+            <aside role="alert" className="mb-4 rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+              Ledger debits linked to posted invoices and delivery receipts total {peso.format(ledgerMonthlySales)} this month. Posted source documents total {peso.format(ledgerData.metrics.monthly_sales)}; difference {peso.format(ledgerSalesDifference)}. Unposted sales-order debits remain in the account balance but are not current sales.
+              <button
+                type="button"
+                onClick={() => { onReportTypeChange('detailed'); onDateTypeChange('month'); }}
+                className="ml-2 inline-flex min-h-8 items-center rounded border border-amber-700 px-2.5 py-1 text-xs font-bold text-amber-950 hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700 dark:border-amber-300 dark:text-amber-100 dark:hover:bg-amber-900/60"
+              >
+                Show this month’s ledger entries
+              </button>
+            </aside>
+          )}
 
           {/* Table */}
           <div className="mb-4 border border-[#ddd]">
@@ -673,7 +705,7 @@ const CustomerLedgerView: React.FC = () => {
     let active = true;
     setLoadingCustomers(true);
     customerLedgerService
-      .getCustomers(debouncedSearch)
+      .getCustomers(debouncedSearch, true)
       .then((rows) => {
         if (!active) return;
         rows = rows.filter((row) => row.company.trim() !== '' || row.customerCode.trim() !== '');

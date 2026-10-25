@@ -241,7 +241,7 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
       };
       existing.soAmount += transaction.soAmount || 0;
       existing.drAmount += transaction.drAmount || 0;
-      existing.invoiceAmount += transaction.reportInvoiceAmount ?? transaction.invoiceAmount ?? 0;
+      existing.invoiceAmount += transaction.invoiceAmount || 0;
       groups.set(key, existing);
     }
     const rows = [...groups.entries()].map(([key, value]) => ({ key, ...value })).sort((left, right) => {
@@ -336,9 +336,9 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                       <th className="w-[14%] px-2 py-2 text-left">TERMS</th>
                       <th className="w-[10%] px-2 py-2 text-left">REF #</th>
                       <th className="w-[9%] px-2 py-2 text-left">SO#</th>
-                      <th className="w-[10%] px-2 py-2 text-right">Amount</th>
+                      <th className="w-[10%] px-2 py-2 text-right">SO AMOUNT</th>
                       <th className="w-[8%] px-2 py-2 text-right">DR</th>
-                      <th className="w-[11%] px-2 py-2 text-right">INVOICE</th>
+                      <th className="w-[11%] px-2 py-2 text-right">NET INVOICE</th>
                       <th className="w-[10%] px-2 py-2 text-left">ASSIGNED AGENT</th>
                     </tr>
                   </thead>
@@ -355,9 +355,16 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                         <td className="break-words px-2 py-2">{transaction.terms}</td>
                         <td className="break-words px-2 py-2">{transaction.refNo}</td>
                         <td className="break-words px-2 py-2">{transaction.soNo}</td>
-                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.reportAmount ?? transaction.soAmount ?? 0)}</td>
+                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.soAmount || 0)}</td>
                         <td className="break-words px-2 py-2 text-right">{money.format(transaction.drAmount || 0)}</td>
-                        <td className="break-words px-2 py-2 text-right">{money.format(transaction.reportInvoiceAmount ?? transaction.invoiceAmount ?? 0)}</td>
+                        <td className="break-words px-2 py-2 text-right">
+                          <span>{money.format(transaction.invoiceAmount || 0)}</span>
+                          {(transaction.vipDiscountAmount || 0) > 0 && (
+                            <span className="block text-[9px] text-slate-500">
+                              Gross {money.format(transaction.grossInvoiceAmount || 0)} · discount {money.format(transaction.vipDiscountAmount || 0)}
+                            </span>
+                          )}
+                        </td>
                         <td className="break-words px-2 py-2">{transaction.salesperson}</td>
                       </tr>
                     ))}
@@ -367,26 +374,25 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                         <td />
                         <td colSpan={2} className="px-2 py-2 font-semibold">TOTAL </td>
                         <td colSpan={2} />
-                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
-                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
-                        <td className="border-y border-black px-2 py-2 font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
+                        <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
+                        <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
+                        <td className="border-y border-black px-2 py-2 text-right font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
                         <td />
                       </tr>
                     )}
 
                     <tr>
                       <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">SUBTOTAL --&gt;</td>
-                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
-                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
-                      <td className="border-y border-black px-2 py-3 font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
+                      <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.soAmount || 0)}</td>
+                      <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.drAmount || 0)}</td>
+                      <td className="border-y border-black px-2 py-3 text-right font-semibold">{money.format(reportData?.summary.grandTotal.invoiceAmount || 0)}</td>
                       <td />
                     </tr>
 
                     {reportType !== 'today' && (
                       <tr>
-                        <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">TOTAL  --&gt;</td>
-                        <td className="px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
-                        <td colSpan={2} />
+                        <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">POSTED SALES TOTAL (DR + INVOICE) --&gt;</td>
+                        <td colSpan={3} className="px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
                         <td />
                       </tr>
                     )}
@@ -396,9 +402,8 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
                       <td />
                     </tr>
                     <tr>
-                      <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">GRAND TOTAL --&gt;</td>
-                      <td className="border-b-4 border-double border-black px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
-                      <td colSpan={2} className="border-b-4 border-double border-black" />
+                      <td colSpan={5} className="px-2 py-3 text-right text-[16px] font-semibold">GRAND TOTAL (POSTED SALES) --&gt;</td>
+                      <td colSpan={3} className="border-b-4 border-double border-black px-2 py-3 text-center font-semibold">{money.format(reportData?.summary.grandTotal.total || 0)}</td>
                       <td />
                     </tr>
                   </tbody>
@@ -407,6 +412,13 @@ const SalesReportDataView: React.FC<SalesReportDataViewProps> = ({
 
               <section className="mt-6" data-testid="payment-terms-breakdown">
                 <h2 className="mb-2 text-[13px] font-semibold">PAYMENT TERMS BREAKDOWN</h2>
+                <p className="mb-2 text-xs text-[#666]">
+                  Posted sales reconcile to DR + Invoice: ₱{money.format(paymentTerms.total.drAmount + paymentTerms.total.invoiceAmount)}.
+                  SO is the linked OnStock sales-order reference and can differ from posted sales
+                  {paymentTerms.total.soAmount !== paymentTerms.total.drAmount + paymentTerms.total.invoiceAmount && (
+                    <> by ₱{money.format(Math.abs(paymentTerms.total.soAmount - paymentTerms.total.drAmount - paymentTerms.total.invoiceAmount))}</>
+                  )}.
+                </p>
                 <table className="w-full border-collapse text-[12px]">
                   <thead className="sticky top-0 z-20 bg-white shadow-sm print:static print:shadow-none"><tr className="border-b border-black"><th className="px-2 py-2 text-left">PAYMENT TERMS</th><th className="px-2 py-2 text-right">SO</th><th className="px-2 py-2 text-right">DR</th><th className="px-2 py-2 text-right">INVOICE</th></tr></thead>
                   <tbody>

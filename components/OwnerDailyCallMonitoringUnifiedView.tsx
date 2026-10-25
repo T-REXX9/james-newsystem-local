@@ -142,7 +142,7 @@ const CurrentMonthSalesBreakdownModal: React.FC<CurrentMonthSalesBreakdownModalP
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">{period} · Sales Report</p>
             <h2 id="current-month-sales-breakdown-title" className="mt-1 text-xl font-extrabold text-slate-900 dark:text-white sm:text-2xl">Current Month Sales Breakdown</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Ranked by posted delivery receipts and invoices.</p>
+            <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">Sales totals use posted delivery receipts and invoices, matching the customer ledger and Daily Call lists. Sales Order amounts remain references until a sale is posted.</p>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close sales breakdown" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
             <X className="h-4 w-4" />
@@ -214,7 +214,7 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
   const ownsApprovalsHistoryEntry = useRef(activeWorkspace === 'approvals');
   const canReviewCustomerRequests = isMasterUserAccount(currentUser);
   const canEditMonthlyTarget = isMasterUserType(currentUser);
-  const [summary, setSummary] = useState({ current: 0, totalPotential: 0 });
+  const [summary, setSummary] = useState({ current: 0, listSales: 0, unclassifiedSales: 0, totalPotential: 0 });
   const [salesReport, setSalesReport] = useState<SalesReportData | null>(null);
   const [monthlyTarget, setMonthlyTarget] = useState(DEFAULT_MONTHLY_TARGET);
   const [isEditingMonthlyTarget, setIsEditingMonthlyTarget] = useState(false);
@@ -317,16 +317,22 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
     ])
       .then(([masterList, salesReport]) => {
         if (!isMounted) return;
+        const reportTransactions = Array.isArray(salesReport.transactions) ? salesReport.transactions : [];
+        const unclassifiedSales = reportTransactions.reduce((total, transaction) => (
+          transaction.customerId.trim() ? total : total + transaction.drAmount + transaction.invoiceAmount
+        ), 0);
         setSalesReport(salesReport);
         setSummary({
           current: salesReport.summary.grandTotal.total,
+          listSales: masterList.items.reduce((total, row) => total + row.currentMonthSales, 0),
+          unclassifiedSales,
           totalPotential: calculateSummary(masterList.items).totalPotential,
         });
       })
       .catch(() => {
         if (isMounted) {
           setSalesReport(null);
-          setSummary({ current: 0, totalPotential: 0 });
+          setSummary({ current: 0, listSales: 0, unclassifiedSales: 0, totalPotential: 0 });
         }
       });
 
@@ -376,6 +382,9 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
       },
     ];
   }, [summary, monthlyTarget]);
+  const reconciledSales = summary.listSales + summary.unclassifiedSales;
+  const salesReconciliationDifference = summary.current - reconciledSales;
+  const salesAreReconciled = Math.abs(salesReconciliationDifference) < 0.01;
 
   return (
     <div className="h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -483,6 +492,14 @@ const OwnerDailyCallMonitoringUnifiedView: React.FC<OwnerDailyCallMonitoringUnif
                   );
                 })}
               </div>
+              {salesReport && (
+                <p
+                  role={salesAreReconciled ? 'status' : 'alert'}
+                  className={`mt-2 rounded-md px-2 py-1.5 text-xs font-semibold ${salesAreReconciled ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}
+                >
+                  {salesAreReconciled ? 'MTD reconciled' : `MTD mismatch ${peso.format(salesReconciliationDifference)}`}: Customer lists {peso.format(summary.listSales)} + sales without a customer ID {peso.format(summary.unclassifiedSales)} = {peso.format(reconciledSales)}; Sales Report {peso.format(summary.current)}.
+                </p>
+              )}
           </header>
 
           <div className="min-h-0 flex-1 overflow-hidden">

@@ -1965,6 +1965,8 @@ export interface SalesReportTransaction {
   reportAmount?: number;
   drAmount: number;
   invoiceAmount: number;
+  grossInvoiceAmount?: number;
+  vipDiscountAmount?: number;
   reportInvoiceAmount?: number;
   salesperson: string;
   currentAgentId?: string;

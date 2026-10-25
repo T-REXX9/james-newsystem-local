@@ -86,7 +86,7 @@ describe('SalesReportDataView legacy report display', () => {
     expect(await screen.findByText('MONTHLY SALES')).toBeInTheDocument();
     expect(screen.getByText('FOR THE MONTH OF SEPTEMBER')).toBeInTheDocument();
     expect(screen.getByText('09/01/2026')).toBeInTheDocument();
-    expect(screen.getByText('GRAND TOTAL -->')).toBeInTheDocument();
+    expect(screen.getByText('GRAND TOTAL (POSTED SALES) -->')).toBeInTheDocument();
     expect(screen.getByTestId('starred-customer-sales-summary')).toHaveTextContent('1 customer with posted sales in this report');
     expect(screen.getByTestId('starred-customer-sales-total')).toHaveTextContent('125.00');
     expect(screen.getByText('Checked and Audited by/ Date:')).toBeInTheDocument();

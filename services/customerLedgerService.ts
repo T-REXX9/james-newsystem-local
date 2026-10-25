@@ -23,6 +23,7 @@ export type CustomerLedgerMetrics = {
   ishinomoto_sales: number;
   dealership_quota: number;
   monthly_sales: number;
+  ledger_monthly_sales?: number;
   last_month_sales: number;
   customer_since: string | null;
   credit_limit: number;
@@ -49,6 +50,8 @@ export type CustomerLedgerDetailedRow = {
   reference: string;
   ref_no: string;
   ref_type: string;
+  unposted_sales_order_id?: string;
+  unposted_sales_order_no?: string;
   check_no: string;
   check_date: string | null;
   dcr: string;
@@ -220,7 +223,7 @@ const mapCustomer = (row: any): LedgerCustomer => ({
 });
 
 export const customerLedgerService = {
-  async getCustomers(search = ''): Promise<LedgerCustomer[]> {
+  async getCustomers(search = '', includeUnlinked = false): Promise<LedgerCustomer[]> {
     const trimmedSearch = search.trim();
     const query = new URLSearchParams({
       main_id: String(getMainId()),
@@ -235,6 +238,7 @@ export const customerLedgerService = {
     const items = Array.isArray(data?.items) ? data.items : [];
     return items
       .map(mapCustomer)
+      .filter((row) => includeUnlinked || !row.company.trim().toLowerCase().startsWith('unlinked: '))
       .filter((row) => row.sessionId !== '' && (row.company.trim() !== '' || row.customerCode.trim() !== ''))
       .sort((a, b) => a.company.localeCompare(b.company));
   },
@@ -281,6 +285,7 @@ export const customerLedgerService = {
         ishinomoto_sales: toNumber(data?.metrics?.ishinomoto_sales ?? data?.metrics?.dealership_sales),
         dealership_quota: toNumber(data?.metrics?.dealership_quota),
         monthly_sales: toNumber(data?.metrics?.monthly_sales),
+        ledger_monthly_sales: toNumber(data?.metrics?.ledger_monthly_sales ?? data?.metrics?.monthly_sales),
         last_month_sales: toNumber(data?.metrics?.last_month_sales),
         customer_since: data?.metrics?.customer_since || null,
         credit_limit: toNumber(data?.metrics?.credit_limit),
@@ -306,6 +311,8 @@ export const customerLedgerService = {
         reference: String(row?.reference || ''),
         ref_no: String(row?.ref_no || ''),
         ref_type: String(row?.ref_type || ''),
+        unposted_sales_order_id: String(row?.unposted_sales_order_id || ''),
+        unposted_sales_order_no: String(row?.unposted_sales_order_no || ''),
         check_no: String(row?.check_no || ''),
         check_date: row?.check_date || null,
         dcr: String(row?.dcr || ''),
