@@ -172,6 +172,7 @@ describe('purchaseRequestService (local API)', () => {
     await expect(purchaseRequestService.updatePRItem('55', { quantity: 3, unit_cost: 10, eta_date: '2026-04-02' })).resolves.toBeUndefined();
     await expect(purchaseRequestService.deletePRItem('55')).resolves.toBeUndefined();
     expect((global.fetch as any).mock.calls.map((call: any[]) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);
+    expect(JSON.parse((global.fetch as any).mock.calls[0][1].body)).not.toHaveProperty('unit_cost');
   });
 
   it('loads suppliers and paginated products for purchase requests', async () => {

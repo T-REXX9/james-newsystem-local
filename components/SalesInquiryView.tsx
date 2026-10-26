@@ -365,19 +365,30 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [remarkTemplateOptions, setRemarkTemplateOptions] = useState<RemarkTemplateRecord[]>([]);
 
   useEffect(() => {
+    let active = true;
     const loadDropdownData = async () => {
-      try {
-        const [courierRes, remarkRes] = await Promise.all([
-          fetchCouriers(),
-          fetchRemarkTemplates(),
-        ]);
-        setCourierOptions(courierRes.items || []);
-        setRemarkTemplateOptions(remarkRes.items || []);
-      } catch (err) {
-        console.error('Failed to load courier/remark options:', err);
+      const [courierResult, remarkResult] = await Promise.allSettled([
+        fetchCouriers(),
+        fetchRemarkTemplates(),
+      ]);
+      if (!active) return;
+
+      if (courierResult.status === 'fulfilled') {
+        setCourierOptions(courierResult.value.items || []);
+      } else {
+        console.error('Failed to load courier options:', courierResult.reason);
+      }
+
+      if (remarkResult.status === 'fulfilled') {
+        setRemarkTemplateOptions(remarkResult.value.items || []);
+      } else {
+        console.error('Failed to load remark options:', remarkResult.reason);
       }
     };
-    loadDropdownData();
+    void loadDropdownData();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {

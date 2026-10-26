@@ -45,6 +45,13 @@ const authHeaders = (): Record<string, string> => {
 };
 
 export async function getVipTierConfig(): Promise<VipTierConfig> {
+  const session = getLocalAuthSession();
+  // VIP settings are master-user-only. Staff use the default config in Sales
+  // Inquiry, so skip the request that would otherwise be rejected with 403.
+  if (String(session?.context?.user_type || '') !== '1') {
+    return DEFAULT_VIP_TIER_CONFIG;
+  }
+
   const query = new URLSearchParams({ main_id: String(resolveMainId()) });
 
   try {
@@ -53,11 +60,8 @@ export async function getVipTierConfig(): Promise<VipTierConfig> {
     });
     return normalizeVipTierConfig(data);
   } catch (error) {
-    // Non-master users (account status role != 1) are not allowed to read VIP
-    // discount settings and the API answers 403 "Only account status role 1
-    // can manage VIP discount settings." That is expected, not a failure: the
-    // caller falls back to the default config. Only log genuinely unexpected
-    // errors so this does not spam the console for every ordinary user.
+    // A failed master-user request falls back to the default config. Keep
+    // unexpected API errors visible for diagnosis.
     const message = error instanceof Error ? error.message : String(error);
     if (!/account status role 1/i.test(message)) {
       console.error('Error loading VIP tier settings:', error);

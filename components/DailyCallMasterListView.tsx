@@ -561,9 +561,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         setRows((current) => current.map((item) => item.id === row.id
           ? { ...item, doNotContact: false, doNotContactReason: '' }
           : item));
-        addToast({ type: 'success', title: 'Blacklisted/Rejected removed', description: `${row.shopName} was updated.` });
+        addToast({ type: 'success', title: 'Do Not Call removed', description: `${row.shopName} was updated.` });
       } catch (error) {
-        addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: getUserFacingErrorMessage(error, 'Please try again.') });
+        addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
       } finally {
         setSavingDoNotCallId(null);
       }
@@ -585,9 +585,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         : item));
       setPendingDoNotCallRow(null);
       setDoNotCallReason('');
-      addToast({ type: 'success', title: 'Blacklisted/Rejected marked', description: `${row.shopName} was updated.` });
+      addToast({ type: 'success', title: 'Do Not Call marked', description: `${row.shopName} was updated.` });
     } catch (error) {
-      addToast({ type: 'error', title: 'Unable to update Blacklisted/Rejected', description: getUserFacingErrorMessage(error, 'Please try again.') });
+      addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
     } finally {
       setSavingDoNotCallId(null);
     }
@@ -617,7 +617,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       setBulkDoNotCallCustomReason('');
       addToast({
         type: 'success',
-        title: 'Blacklisted/Rejected applied',
+        title: 'Do Not Call applied',
         description: `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked with the shared reason.`,
       });
     } catch (error) {
@@ -1741,7 +1741,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <UserX className="h-4 w-4" aria-hidden="true" />
-                    Blacklisted/Rejected
+                    Do Not Call
                   </button>}
                 </div>
               </div>
@@ -1915,7 +1915,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           ) : (
                             <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           )}
-                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Blacklisted/Rejected`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Blacklisted/Rejected</span>}
+                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Do Not Call</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed
@@ -2034,15 +2034,15 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {isMasterUserType(currentUser) && !row.dataIntegrityException && (
                               <button
                                 type="button"
-                                aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Blacklisted/Rejected`}
+                                aria-label={`${row.doNotContact ? 'Remove' : 'Mark'} ${row.shopName} Do Not Call`}
                                 aria-pressed={Boolean(row.doNotContact)}
-                                title={row.doNotContact ? 'Remove Blacklisted/Rejected mark' : 'Mark Blacklisted/Rejected'}
+                                title={row.doNotContact ? 'Remove Do Not Call mark' : 'Mark Do Not Call'}
                                 onClick={() => void handleToggleDoNotCall(row)}
                                 disabled={savingDoNotCallId === row.id}
                                 className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 ${row.doNotContact ? 'border-red-600 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'}`}
                               >
                                 {savingDoNotCallId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <UserX className="h-3.5 w-3.5" aria-hidden="true" />}
-                                <span>{row.doNotContact ? 'Remove Blacklisted/Rejected' : 'Mark Blacklisted/Rejected'}</span>
+                                <span>{row.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}</span>
                               </button>
                             )}
                             {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
@@ -2215,7 +2215,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
             onSubmit={(event) => { event.preventDefault(); void handleConfirmBulkDoNotCall(); }}
           >
-            <h2 id="bulk-do-not-call-title" className="text-base font-bold text-slate-950">Apply Blacklisted/Rejected to {selectedDoNotCallRows.length} customers</h2>
+            <h2 id="bulk-do-not-call-title" className="text-base font-bold text-slate-950">Apply Do Not Call to {selectedDoNotCallRows.length} customers</h2>
             <p className="mt-1 text-sm text-slate-600">This shared reason will appear on each customer profile.</p>
             <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="bulk-do-not-call-reason">Shared reason</label>
             <select
@@ -2258,7 +2258,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
             onSubmit={(event) => { event.preventDefault(); handleConfirmDoNotCall(); }}
           >
-            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-950">Mark {pendingDoNotCallRow.shopName} as Blacklisted/Rejected</h2>
+            <h2 id="do-not-call-reason-title" className="text-base font-bold text-slate-950">Mark {pendingDoNotCallRow.shopName} as Do Not Call</h2>
             <p className="mt-1 text-sm text-slate-600">Add a reason. Sales agents will see it on the customer profile.</p>
             <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-call-reason">Reason</label>
             <select
@@ -2286,7 +2286,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 type="submit"
                 disabled={!doNotCallReasonOption || (doNotCallReasonOption === 'Other reasons' && !doNotCallCustomReason.trim()) || savingDoNotCallId !== null}
                 className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >{savingDoNotCallId === pendingDoNotCallRow.id ? 'Saving…' : 'Mark Blacklisted/Rejected'}</button>
+              >{savingDoNotCallId === pendingDoNotCallRow.id ? 'Saving…' : 'Mark Do Not Call'}</button>
             </div>
           </form>
         </div>

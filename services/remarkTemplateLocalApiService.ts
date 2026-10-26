@@ -1,7 +1,18 @@
-import { getLocalAuthToken } from './localAuthService';
+import { getLocalAuthSession, getLocalAuthToken } from './localAuthService';
 import { parseApiErrorMessage } from './localApiAuth';
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
 const API_MAIN_ID = Number((import.meta as any)?.env?.VITE_MAIN_ID || 1);
+
+const getMainId = (): number => {
+    const session = getLocalAuthSession();
+    const mainId = Number(
+        session?.context?.main_userid
+        || session?.context?.user?.main_userid
+        || API_MAIN_ID
+        || 1
+    );
+    return Number.isFinite(mainId) && mainId > 0 ? mainId : 1;
+};
 
 export interface RemarkTemplateRecord {
     id: number;
@@ -32,7 +43,7 @@ const requestJson = async (url: string, init?: RequestInit): Promise<any> => {
 
 export const fetchRemarkTemplates = async (search = ''): Promise<RemarkTemplateListResponse> => {
     const query = new URLSearchParams({
-        main_id: String(API_MAIN_ID),
+        main_id: String(getMainId()),
         search,
         page: '1',
         per_page: '500',
@@ -45,7 +56,7 @@ export const createRemarkTemplate = async (name: string): Promise<RemarkTemplate
     const payload = await requestJson(`${API_BASE_URL}/remark-templates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ main_id: API_MAIN_ID, name }),
+        body: JSON.stringify({ main_id: getMainId(), name }),
     });
     return payload?.data;
 };
@@ -57,13 +68,13 @@ export const updateRemarkTemplate = async (
     const payload = await requestJson(`${API_BASE_URL}/remark-templates/${remarkTemplateId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ main_id: API_MAIN_ID, name }),
+        body: JSON.stringify({ main_id: getMainId(), name }),
     });
     return payload?.data;
 };
 
 export const deleteRemarkTemplate = async (remarkTemplateId: number): Promise<void> => {
-    const query = new URLSearchParams({ main_id: String(API_MAIN_ID) });
+    const query = new URLSearchParams({ main_id: String(getMainId()) });
     await requestJson(`${API_BASE_URL}/remark-templates/${remarkTemplateId}?${query.toString()}`, {
         method: 'DELETE',
     });

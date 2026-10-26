@@ -348,6 +348,9 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
     const product =
       selectedProduct || products.find((item) => item.id === selectedProductId);
     const supplier = suppliers.find((item) => item.id === selectedSupplierId);
+    const supplierCost = (product as ProductWithMetadata | undefined)?.supplier_costs?.find(
+      (cost) => String(cost.supplier_id) === String(selectedSupplierId),
+    );
     await onAddItem({
       item_id: selectedProductId,
       item_code: product?.item_code,
@@ -359,7 +362,7 @@ const PurchaseRequestView: React.FC<PurchaseRequestViewProps> = ({
       description: product?.description,
       quantity,
       unit: "PCS",
-      unit_cost: Number(product?.cost || 0),
+      unit_cost: supplierCost ? Number(supplierCost.cost) : undefined,
       supplier_id: selectedSupplierId || null,
       supplier_name: supplier?.company || null,
       eta_date: etaDate || null,

@@ -421,9 +421,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
 
     setIsSaving(true);
     setSubmitError('');
+    const payload = buildPayload();
+    const applyToAllPartNo = mode === 'edit' && Boolean(payload.apply_cost_to_all_part_no);
     try {
       if (mode === 'add') {
-        await createProduct(buildPayload());
+        await createProduct(payload);
         if (fromSuggestedStock) {
           try {
             await clearNotListedRemarks({
@@ -448,13 +450,26 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
         clearEditor();
         await loadProducts(1, false);
       } else if (editingProduct) {
-        await updateProduct(editingProduct.id, buildPayload());
-        addToast({ type: 'success', title: 'Product saved', description: 'Product record was updated successfully.' });
+        await updateProduct(editingProduct.id, payload);
+        addToast({
+          type: 'success',
+          title: 'Product saved',
+          description: applyToAllPartNo
+            ? 'Supplier costing was applied to products with this part number.'
+            : 'Product record was updated successfully.',
+        });
         const refreshed = await fetchProductById(editingProduct.id);
         if (refreshed) {
           selectProduct(refreshed);
-          setProducts((current) => current.map((product) => product.id === refreshed.id ? refreshed : product));
         }
+        const updatedSupplierCosts = refreshed?.supplier_costs || (payload.supplier_costs as SupplierCost[]);
+        const savedPartNo = String(payload.part_no || '');
+        setProducts((current) => current.map((product) => {
+          if (applyToAllPartNo && product.part_no === savedPartNo) {
+            return { ...product, supplier_costs: updatedSupplierCosts };
+          }
+          return refreshed && product.id === refreshed.id ? refreshed : product;
+        }));
       }
     } catch (error) {
       if (shouldSuppressAuthError(error)) return;

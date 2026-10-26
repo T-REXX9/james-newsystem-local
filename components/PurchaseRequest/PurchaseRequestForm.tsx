@@ -92,7 +92,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({ onCancel, onS
       description: product?.description,
       quantity: resolvedQuantity,
       unit: 'PCS',
-      unit_cost: Number(selectedSupplierCost?.cost ?? product?.cost ?? 0),
+      unit_cost: selectedSupplierCost ? Number(selectedSupplierCost.cost) : undefined,
       supplier_id: selectedSupplierId || undefined,
       supplier_name: selectedSupplier?.company,
       eta_date: etaDate || undefined,

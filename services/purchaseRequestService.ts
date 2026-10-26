@@ -171,7 +171,7 @@ const mapCreateItemPayload = (item: CreatePRItemPayload) => ({
   description: item.description,
   quantity: toNumber(item.quantity, 0),
   unit: item.unit || 'PCS',
-  unit_cost: toNumber(item.unit_cost ?? 0, 0),
+  unit_cost: item.unit_cost == null ? undefined : toNumber(item.unit_cost, 0),
   supplier_id: item.supplier_id || '',
   supplier_name: item.supplier_name || '',
   eta_date: item.eta_date || '',

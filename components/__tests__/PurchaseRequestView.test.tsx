@@ -17,6 +17,7 @@ vi.mock('../ProductAutocomplete', () => ({
           item_code: 'ITEM-002',
           description: 'Widget Beta',
           cost: 80,
+          supplier_costs: [{ supplier_id: 'sup-2', supplier_name: 'Supplier Two', cost: 35 }],
           reorder_quantity: 0,
         })
       }
@@ -198,6 +199,37 @@ describe('PurchaseRequestView', () => {
     await user.click(screen.getByRole('button', { name: /confirm add item/i }));
 
     await waitFor(() => expect(onAddItem).toHaveBeenCalled());
+  });
+
+  it('uses the selected supplier costing when adding a product to a PR', async () => {
+    const user = userEvent.setup();
+    const onAddItem = vi.fn().mockResolvedValue(undefined);
+
+    renderView(
+      <PurchaseRequestView
+        request={{ ...baseRequest, status: 'Draft' } as any}
+        onBack={vi.fn()}
+        onUpdate={vi.fn()}
+        onUpdateItem={vi.fn()}
+        onDeleteItem={vi.fn()}
+        onAddItem={onAddItem}
+        onConvert={vi.fn()}
+        onPrint={vi.fn()}
+        products={[]}
+        suppliers={[{ id: 'sup-2', company: 'Supplier Two' } as any]}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Pick View Product' }));
+    await user.selectOptions(screen.getByLabelText('Add item supplier'), 'sup-2');
+    await user.click(screen.getByRole('button', { name: 'Confirm add item' }));
+
+    await waitFor(() =>
+      expect(onAddItem).toHaveBeenCalledWith(
+        expect.objectContaining({ supplier_id: 'sup-2', unit_cost: 35 }),
+      ),
+    );
   });
 
   it('lets the user reopen a Cancelled request instead of leaving it stranded', async () => {
