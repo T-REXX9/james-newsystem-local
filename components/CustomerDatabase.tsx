@@ -92,6 +92,11 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
     setSelectedCustomerId(id);
   };
 
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    if (query.trim()) setFilterVisibility('All');
+  };
+
   const handleToggleSelection = (id: string) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) {
@@ -444,7 +449,7 @@ const CustomerDatabase: React.FC<{ initialStatus?: string; initialContactId?: st
         selectedCustomerId={selectedCustomerId}
         onSelectCustomer={handleSelectCustomer}
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
         filterStatus={filterStatus}
         onFilterStatusChange={setFilterStatus}
         filterVisibility={filterVisibility}

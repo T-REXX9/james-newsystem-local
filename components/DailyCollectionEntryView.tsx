@@ -789,6 +789,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
       });
       setForm((prev) => ({
         ...prev,
+        customerId: '',
+        customerCompany: '',
         bank: '',
         checkNo: '',
         amount: '',
@@ -1482,7 +1484,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                               onClick={handleSavePayment}
                               disabled={savingPayment}
                             >
-                              {savingPayment ? 'Saving...' : 'Add Payment'}
+                              {savingPayment ? 'Saving...' : 'Add Customer'}
                             </button>
                           </td>
                         </tr>
