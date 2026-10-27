@@ -86,7 +86,10 @@ export type CollectionPaymentPayload = {
 export type CollectionPaymentLineUpdate = Pick<
   CollectionPaymentPayload,
   'type' | 'bank' | 'checkNo' | 'checkDate' | 'amount' | 'status' | 'remarks'
->;
+> & {
+  customerId?: string;
+  transactions?: CollectionPaymentTransaction[];
+};
 
 export const LEGACY_COLLECTION_ITEM_STATUSES = [
   'Pending',
@@ -379,6 +382,8 @@ export const dailyCollectionService = {
       body: JSON.stringify({
         main_id: ctx.mainId,
         user_id: ctx.userId,
+        customer_id: update.customerId,
+        transactions: update.transactions,
         type: update.type,
         bank: update.bank,
         check_no: update.checkNo,

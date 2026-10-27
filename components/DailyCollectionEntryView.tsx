@@ -7,6 +7,7 @@ import {
   DailyCollectionHeader,
   DailyCollectionItem,
   CollectionCustomer,
+  CollectionPaymentTransaction,
   CollectionUnpaidRow,
   LEGACY_COLLECTION_ITEM_STATUSES,
   CollectionPaymentLineUpdate,
@@ -73,8 +74,8 @@ const getStatusBadgeClasses = (status?: string): string => {
   }
 };
 
-const INPUT_CLASS = 'w-full px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
-const SELECT_CLASS = 'px-3 py-2 rounded border border-slate-300 bg-white text-slate-700 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 text-sm';
+const INPUT_CLASS = 'w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
+const SELECT_CLASS = 'rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200';
 
 const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = ({ initialCollectionRefNo }) => {
   const [permissionRevision, setPermissionRevision] = useState(0);
@@ -91,10 +92,15 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   const [customerSearch, setCustomerSearch] = useState('');
   const [transactionSearch, setTransactionSearch] = useState('');
   const [showTransactionCombo, setShowTransactionCombo] = useState(false);
+  const [transactionComboMode, setTransactionComboMode] = useState<'add' | 'edit'>('add');
+  const [editingUnpaidRows, setEditingUnpaidRows] = useState<CollectionUnpaidRow[]>([]);
+  const [editingSelectedTransactions, setEditingSelectedTransactions] = useState<Record<string, boolean>>({});
+  const [loadingEditingTransactions, setLoadingEditingTransactions] = useState(false);
   const [transactionComboPosition, setTransactionComboPosition] = useState({
     top: 0,
     left: 0,
     width: 0,
+    maxHeight: 280,
   });
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
@@ -191,6 +197,22 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     ));
   }, [transactionSearch, unpaidRows]);
 
+  const editingSelectedTransactionKeys = useMemo(() => (
+    Object.entries(editingSelectedTransactions)
+      .filter(([, value]) => value)
+      .map(([key]) => key)
+  ), [editingSelectedTransactions]);
+
+  const filteredEditingUnpaidRows = useMemo(() => {
+    const needle = transactionSearch.trim().toLowerCase();
+    if (!needle) return editingUnpaidRows;
+    return editingUnpaidRows.filter((row) => (
+      row.linvoice_no.toLowerCase().includes(needle)
+      || row.transactionType.toLowerCase().includes(needle)
+      || String(row.totalAmount || 0).includes(needle)
+    ));
+  }, [editingUnpaidRows, transactionSearch]);
+
   const selectedTransactionsLabel = useMemo(() => {
     if (selectedTransactionKeys.length === 0) return 'Select transaction no.';
     if (selectedTransactionKeys.length === 1) {
@@ -202,6 +224,18 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     }
     return `${selectedTransactionKeys.length} transactions selected`;
   }, [selectedTransactionKeys, unpaidRows]);
+
+  const editingTransactionsLabel = useMemo(() => {
+    if (editingSelectedTransactionKeys.length === 0) return 'Select transaction no.';
+    if (editingSelectedTransactionKeys.length === 1) {
+      const [transactionType, refno] = editingSelectedTransactionKeys[0].split(':');
+      const selectedRow = editingUnpaidRows.find(
+        (row) => row.transactionType === transactionType && row.lrefno === refno,
+      );
+      return selectedRow?.linvoice_no || editingSelectedTransactionKeys[0];
+    }
+    return `${editingSelectedTransactionKeys.length} transactions selected`;
+  }, [editingSelectedTransactionKeys, editingUnpaidRows]);
 
   const customerOptions = useMemo(() => {
     const selectedCustomer = customers.find((customer) => customer.id === form.customerId);
@@ -344,7 +378,9 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
 
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transactionComboRef = useRef<HTMLDivElement | null>(null);
+  const editTransactionComboRef = useRef<HTMLDivElement | null>(null);
   const transactionComboTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const editTransactionComboTriggerRef = useRef<HTMLButtonElement | null>(null);
   const transactionComboPanelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (searchDebounceRef.current) {
@@ -406,13 +442,34 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     if (!showTransactionCombo) return;
 
     const updateTransactionComboPosition = () => {
-      const rect = transactionComboTriggerRef.current?.getBoundingClientRect();
+      const triggerRef = transactionComboMode === 'edit'
+        ? editTransactionComboTriggerRef
+        : transactionComboTriggerRef;
+      const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
+      const viewportPadding = 8;
+      const maxHeight = 280;
+      const desiredHeight = Math.min(
+        transactionComboPanelRef.current?.scrollHeight || maxHeight,
+        maxHeight,
+      );
+      const spaceAbove = Math.max(0, rect.top - viewportPadding);
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding);
+      const openAbove = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+      const availableHeight = openAbove ? spaceAbove : spaceBelow;
+      const width = Math.min(
+        Math.max(rect.width, 220),
+        Math.max(window.innerWidth - viewportPadding * 2, 0),
+      );
 
       setTransactionComboPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
+        top: openAbove ? rect.top - 4 - Math.min(desiredHeight, availableHeight) : rect.bottom + 4,
+        left: Math.min(
+          Math.max(rect.left, viewportPadding),
+          Math.max(window.innerWidth - width - viewportPadding, viewportPadding),
+        ),
+        width,
+        maxHeight: Math.min(desiredHeight, availableHeight),
       });
     };
 
@@ -421,7 +478,9 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (
-        !transactionComboRef.current?.contains(target)
+        !(transactionComboMode === 'edit'
+          ? editTransactionComboRef.current?.contains(target)
+          : transactionComboRef.current?.contains(target))
         && !transactionComboPanelRef.current?.contains(target)
       ) {
         setShowTransactionCombo(false);
@@ -437,7 +496,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
       window.removeEventListener('scroll', updateTransactionComboPosition, true);
       document.removeEventListener('mousedown', onPointerDown);
     };
-  }, [showTransactionCombo]);
+  }, [showTransactionCombo, transactionComboMode, editingUnpaidRows.length, unpaidRows.length]);
 
   useEffect(() => {
     if (selectedAmount > 0) {
@@ -643,10 +702,49 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   };
 
   const toggleTransactionSelection = (key: string) => {
-    setSelectedTransactions((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    if (transactionComboMode === 'edit') {
+      const nextSelections = {
+        ...editingSelectedTransactions,
+        [key]: !editingSelectedTransactions[key],
+      };
+      setEditingSelectedTransactions(nextSelections);
+      const transactions: CollectionPaymentTransaction[] = editingUnpaidRows
+        .filter((row) => nextSelections[`${row.transactionType}:${row.lrefno}`])
+        .map((row) => ({
+          transaction_type: row.transactionType,
+          transaction_refno: row.lrefno,
+          transaction_no: row.linvoice_no,
+          transaction_amount: row.totalAmount,
+        }));
+      setEditingItem((current) => current ? { ...current, transactions } : current);
+      return;
+    }
+
+    setSelectedTransactions((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleEditCustomerSelect = async (item: DailyCollectionItem, customer: CollectionCustomer) => {
+    const customerChanged = customer.id !== item.lcustomer;
+    setEditingItem((current) => current ? {
+      ...current,
+      customerId: customer.id,
+      transactions: customerChanged ? [] : undefined,
+    } : current);
+    setEditingSelectedTransactions({});
+    setEditingUnpaidRows([]);
+    setTransactionSearch('');
+    setError('');
+    if (!customerChanged) return;
+
+    setLoadingEditingTransactions(true);
+    try {
+      const rows = await dailyCollectionService.getUnpaidTransactions(customer.id);
+      setEditingUnpaidRows(rows);
+    } catch (err: any) {
+      if (!shouldSuppressAuthError(err)) setError(err?.message || 'Failed to load customer transactions');
+    } finally {
+      setLoadingEditingTransactions(false);
+    }
   };
 
   const startEditingItem = (item: DailyCollectionItem) => {
@@ -657,7 +755,10 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
       || item.lcollection_status === 'Posted'
     ) return;
     setEditingItemId(item.lid);
+    setEditingUnpaidRows([]);
+    setEditingSelectedTransactions({});
     setEditingItem({
+      customerId: item.lcustomer || '',
       type: item.ltype || 'Cash',
       bank: item.lbank || '',
       checkNo: item.lchk_no || '',
@@ -671,6 +772,10 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   const cancelEditingItem = () => {
     setEditingItemId(null);
     setEditingItem(null);
+    setEditingUnpaidRows([]);
+    setEditingSelectedTransactions({});
+    setShowTransactionCombo(false);
+    setTransactionComboMode('add');
   };
 
   const handleEditItemTypeChange = (type: string) => {
@@ -685,6 +790,18 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     if (!canEdit || !selectedRefno || !editingItem || editingItemId !== item.lid) return;
     if (!(Number(editingItem.amount) > 0)) {
       setError('Amount must be greater than 0');
+      return;
+    }
+    if (!editingItem.customerId) {
+      setError('Customer is required');
+      return;
+    }
+    if (
+      editingItem.customerId !== item.lcustomer
+      && item.ltransaction_no
+      && (editingItem.transactions?.length || 0) === 0
+    ) {
+      setError('Select a transaction for the new customer');
       return;
     }
     if (editingItem.checkDate) {
@@ -900,15 +1017,24 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
 
   const statusButtons = renderStatusButtons();
 
-  const transactionComboDropdown = showTransactionCombo && form.customerId
+  const isEditingTransactionCombo = transactionComboMode === 'edit';
+  const transactionComboCustomerId = isEditingTransactionCombo
+    ? editingItem?.customerId
+    : form.customerId;
+  const transactionComboRows = isEditingTransactionCombo ? filteredEditingUnpaidRows : filteredUnpaidRows;
+  const transactionComboSelections = isEditingTransactionCombo ? editingSelectedTransactions : selectedTransactions;
+
+  const transactionComboDropdown = showTransactionCombo && transactionComboCustomerId
     ? createPortal(
       <div
         ref={transactionComboPanelRef}
         className="fixed z-[200] rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl"
+        data-testid="daily-collection-transaction-picker"
         style={{
           top: transactionComboPosition.top,
           left: transactionComboPosition.left,
           width: transactionComboPosition.width,
+          maxHeight: transactionComboPosition.maxHeight,
         }}
       >
         <div className="p-2 border-b border-slate-200 dark:border-slate-800">
@@ -921,17 +1047,17 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
         </div>
 
         <div className="max-h-56 overflow-y-auto p-1" role="listbox" aria-multiselectable="true">
-          {unpaidRows.length === 0 && (
+          {(isEditingTransactionCombo ? editingUnpaidRows : unpaidRows).length === 0 && (
             <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">No unpaid items</p>
           )}
 
-          {unpaidRows.length > 0 && filteredUnpaidRows.length === 0 && (
+          {(isEditingTransactionCombo ? editingUnpaidRows : unpaidRows).length > 0 && transactionComboRows.length === 0 && (
             <p className="px-2 py-2 text-sm text-slate-500 dark:text-slate-400">No matching transaction</p>
           )}
 
-          {filteredUnpaidRows.map((row) => {
+          {transactionComboRows.map((row) => {
             const key = `${row.transactionType}:${row.lrefno}`;
-            const checked = !!selectedTransactions[key];
+            const checked = !!transactionComboSelections[key];
             return (
               <label
                 key={key}
@@ -958,16 +1084,16 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     <>
       <div
         data-testid="daily-collection-scroll-container"
-        className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#f4f4f4] px-2 py-6 sm:px-4 sm:py-10 text-[13px] text-[#222]"
+        className="h-full min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain bg-[#f4f4f4] px-3 py-4 text-[13px] text-[#263f52] sm:px-5 sm:py-6 lg:px-6"
       >
-        <div className="mx-auto flex w-full max-w-none flex-col gap-6">
+        <div className="mx-auto flex w-full max-w-none flex-col gap-4 sm:gap-5">
         {/* Old-system collection list */}
-        <div className="flex max-h-[275px] w-full shrink-0 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
-          <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-4 border-b border-[#ddd] px-9 py-5">
-            <div className="flex items-center gap-1">
+        <div className="flex max-h-[300px] w-full shrink-0 flex-col overflow-hidden rounded-lg border border-[#d3dde6] bg-white shadow-sm">
+          <div className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#dce5ec] bg-[#f8fafc] px-4 py-4 sm:px-5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="rounded-[4px] bg-[#5d82a2] px-4 py-2 text-white"
+                className="rounded-md bg-[#315574] px-4 py-2 font-medium text-white transition-colors hover:bg-[#263f52] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5d82a2] focus-visible:ring-offset-2"
                 onClick={() => {
                   const field = document.getElementById('daily-collection-search');
                   field?.focus();
@@ -976,27 +1102,27 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 Search Check
               </button>
               {canAdd && <button
-                className="rounded-[4px] bg-[#51b957] px-4 py-2 text-white disabled:opacity-50"
+                className="rounded-md bg-[#51b957] px-4 py-2 font-medium text-white transition-colors hover:bg-[#379c42] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#51b957] focus-visible:ring-offset-2 disabled:opacity-50"
                 onClick={handleCreate}
                 disabled={workingAction === 'create'}
               >
                 Create New
               </button>}
-              <div className="relative ml-3">
+              <div className="relative min-w-[210px] flex-1 sm:ml-1 sm:max-w-[280px]">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   id="daily-collection-search"
-                  className="h-[34px] w-[230px] rounded-[3px] border border-[#ccc] pl-9 pr-3"
+                  className="h-10 w-full rounded-md border border-[#cbd5df] bg-white pl-9 pr-3 text-sm text-[#263f52] placeholder:text-slate-400 focus:border-[#315574] focus:outline-none focus:ring-2 focus:ring-[#315574]/20"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search DCR no / refno"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="font-['Oswald'] text-[20px] text-[#263f52]">Filter by Month:</span>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[#5d7284]">Filter by Month</span>
                 <select
-                  className="h-[34px] w-[200px] rounded-[3px] border border-[#ccc] bg-white px-3"
+                  className="h-10 w-[150px] rounded-md border border-[#cbd5df] bg-white px-3 text-sm text-[#263f52] focus:border-[#315574] focus:outline-none focus:ring-2 focus:ring-[#315574]/20 sm:w-[170px]"
                   value={filterMonth}
                   onChange={(e) => setFilterMonth(e.target.value)}
                 >
@@ -1012,7 +1138,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 </select>
                 <input
                   type="number"
-                  className="h-[34px] w-[100px] rounded-[3px] border border-[#ccc] px-3"
+                  className="h-10 w-[88px] rounded-md border border-[#cbd5df] bg-white px-3 text-sm text-[#263f52] focus:border-[#315574] focus:outline-none focus:ring-2 focus:ring-[#315574]/20"
                   value={filterYear}
                   onChange={(e) => setFilterYear(e.target.value)}
                   min={2000}
@@ -1020,8 +1146,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 />
             </div>
           </div>
-          <div data-testid="daily-collection-list-scroll" className="flex-1 overflow-y-auto px-6 py-6">
-            <div className="grid grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)] border-b-2 border-[#ddd] px-2 py-2 font-['Oswald'] text-[14px]">
+          <div data-testid="daily-collection-list-scroll" className="flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+            <div className="grid grid-cols-[100px_minmax(150px,1fr)_minmax(130px,0.8fr)] border-b border-[#cbd8e2] px-2 py-2 font-semibold text-xs uppercase tracking-wide text-[#5d7284] sm:grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)]">
               <span>Date</span>
               <span>DCR No.</span>
               <span>Agent / Account</span>
@@ -1038,7 +1164,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 <div
                   key={row.lrefno}
                   onClick={() => setSelectedRefno(row.lrefno)}
-                  className={`grid cursor-pointer grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)] border-b border-[#ddd] px-2 py-2 ${active ? 'text-blue-600' : ''}`}
+                  className={`grid cursor-pointer grid-cols-[100px_minmax(150px,1fr)_minmax(130px,0.8fr)] border-b border-[#e7edf2] px-2 py-3 transition-colors hover:bg-[#f1f6fa] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#5d82a2] sm:grid-cols-[120px_minmax(160px,1fr)_minmax(140px,0.8fr)] ${active ? 'bg-[#edf4f9] font-medium text-[#315574]' : ''}`}
                 >
                   <span>
                     {toDisplayDate(row.ldatetime) || '-'}
@@ -1056,7 +1182,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
         </div>
 
         {/* Old-system daily collection report */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[5px] border border-[#d8d8d8] bg-white">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-[#d3dde6] bg-white shadow-sm">
           {!selectedRefno && (
             <div className="h-full grid place-items-center text-slate-500 dark:text-slate-400">
               <p>Select or create a DCR record</p>
@@ -1066,7 +1192,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
           {selectedRefno && (
             <>
               {/* Action bar */}
-              <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-2 border-b border-[#ddd] px-5">
+              <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#dce5ec] bg-[#f8fafc] px-4 py-3 sm:px-5">
                 <div className="flex flex-wrap gap-2">
                   {statusButtons.primary}
                 </div>
@@ -1076,11 +1202,11 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
               </div>
 
               {/* DCR header info */}
-              <div className="border-b border-[#ddd] px-5 py-4">
+              <div className="border-b border-[#dce5ec] px-4 py-4 sm:px-5">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
-                    <h2 className="border-b border-[#5d82a2] pb-4 pr-24 font-['Oswald'] text-[18px] uppercase text-[#315574]">Daily Collection Entry</h2>
-                    <p className="mt-3 font-['Oswald'] text-[18px] text-[#263f52]">
+                    <h2 className="border-b border-[#dce5ec] pb-3 font-['Oswald'] text-lg font-semibold text-[#315574]">Daily Collection Entry</h2>
+                    <p className="mt-3 font-['Oswald'] text-xl font-semibold text-[#263f52]">
                       {selectedHeader?.lcolection_no || selectedRefno}
                     </p>
                     <p>
@@ -1092,7 +1218,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                     </p>
                     <p>Agent / Account: {selectedHeader?.created_by || '-'}</p>
                   </div>
-                  <div className="font-['Oswald'] text-[18px] text-[#263f52]">Status: {selectedHeader?.lstatus || 'Pending'}</div>
+                  <div className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-sm font-semibold ${getStatusBadgeClasses(selectedHeader?.lstatus || 'Pending')}`}>Status: {selectedHeader?.lstatus || 'Pending'}</div>
                 </div>
                 {error && (
                   <div className="mt-2 p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
@@ -1102,7 +1228,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
               </div>
 
               {/* Content area */}
-              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6 sm:py-6">
+              <div className="flex min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden px-3 py-4 sm:px-5 sm:py-5">
                 {!detailLoading && canAddPayment && (
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div className="flex gap-2">
@@ -1141,8 +1267,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 )}
 
                 {/* Payment lines table */}
-                <div data-testid="daily-collection-detail-scroll" className="max-h-[480px] overflow-x-hidden overflow-y-auto">
-                  <table className="w-full table-fixed text-sm">
+                <div data-testid="daily-collection-detail-scroll" className="max-h-[480px] min-w-0 overflow-x-auto overflow-y-auto rounded-md border border-[#dce5ec]">
+                  <table className="w-full min-w-[1450px] table-fixed text-sm">
                     <colgroup>
                       <col className="w-[3%]" />
                       <col className="w-[14%]" />
@@ -1157,7 +1283,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                       <col className="w-[6%]" />
                       <col className="w-[8%]" />
                     </colgroup>
-                    <thead className="sticky top-0 border-b-2 border-[#ddd] bg-white font-['Oswald'] text-[#222]">
+                    <thead className="sticky top-0 z-10 border-b border-[#cbd8e2] bg-[#eaf1f7] font-['Oswald'] text-[#274764] shadow-sm">
                       <tr>
                         <th className="px-2 py-2 text-left font-bold">
                           <input
@@ -1189,7 +1315,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                         <th className="px-2 py-2 text-left font-bold">Approval</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#ddd]">
+                    <tbody className="divide-y divide-[#e3eaf0]">
                       {detailLoading && (
                         <tr>
                           <td colSpan={12} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
@@ -1211,7 +1337,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                         return (
                           <tr
                             key={item.lid}
-                            className={index % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}
+                            className={`${isEditing ? 'bg-[#edf4f9]' : index % 2 === 0 ? 'bg-white' : 'bg-[#f8fafc]'} transition-colors hover:bg-[#f1f6fa]`}
                           >
                             <td className="px-2 py-2">
                               <input
@@ -1226,8 +1352,52 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                 }}
                               />
                             </td>
-                            <td className="break-words px-2 py-2">{item.lcustomer_fname || item.lcustomer || '-'}</td>
-                            <td className="break-words px-2 py-2">{item.ltransaction_no || '-'}</td>
+                            <td className="break-words px-2 py-2">
+                              {isEditing ? (
+                                <CustomerAutocomplete
+                                  contacts={customerOptions}
+                                  selectedCustomer={customerOptions.find((customer) => customer.id === editingItem.customerId) || {
+                                    id: editingItem.customerId,
+                                    code: item.lcustomer_lname || '',
+                                    company: item.lcustomer_fname || item.lcustomer || '',
+                                  }}
+                                  onSearch={setCustomerSearch}
+                                  isLoading={loadingCustomers}
+                                  disabled={savingItemId === item.lid}
+                                  onSelect={(customer) => void handleEditCustomerSelect(item, customer)}
+                                  placeholder="Search customer"
+                                  inputClassName="h-[38px] rounded-[3px] border-[#ccc] bg-white text-[13px] text-[#555]"
+                                />
+                              ) : (item.lcustomer_fname || item.lcustomer || '-')}
+                            </td>
+                            <td className="break-words px-2 py-2">
+                              {isEditing && editingItem.customerId !== item.lcustomer ? (
+                                <div className="relative" ref={editTransactionComboRef}>
+                                  <button
+                                    type="button"
+                                    ref={editTransactionComboTriggerRef}
+                                    className={`${SELECT_CLASS} flex w-full items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60`}
+                                    onClick={() => {
+                                      setTransactionComboMode('edit');
+                                      setTransactionSearch('');
+                                      setShowTransactionCombo((previous) => (
+                                        transactionComboMode === 'edit' ? !previous : true
+                                      ));
+                                    }}
+                                    disabled={savingItemId === item.lid || loadingEditingTransactions}
+                                    aria-haspopup="listbox"
+                                    aria-expanded={showTransactionCombo && transactionComboMode === 'edit'}
+                                  >
+                                    <span className="truncate">
+                                      {loadingEditingTransactions ? 'Loading transactions...' : editingTransactionsLabel}
+                                    </span>
+                                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                                      {showTransactionCombo && transactionComboMode === 'edit' ? '^' : 'v'}
+                                    </span>
+                                  </button>
+                                </div>
+                              ) : (item.ltransaction_no || '-')}
+                            </td>
                             <td className="px-2 py-2">
                               {isEditing ? (
                                 <select
@@ -1367,7 +1537,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                         );
                       })}
                       {!detailLoading && canAddPayment && (
-                        <tr className="bg-[#fafafa]">
+                        <tr className="bg-[#f3f7fa]">
                           <td className="px-2 py-2">
                             <input
                               type="checkbox"
@@ -1408,7 +1578,12 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                 type="button"
                                 ref={transactionComboTriggerRef}
                                 className={`${SELECT_CLASS} w-full flex items-center justify-between gap-2 text-left`}
-                                onClick={() => setShowTransactionCombo((prev) => !prev)}
+                                onClick={() => {
+                                  setTransactionComboMode('add');
+                                  setShowTransactionCombo((previous) => (
+                                    transactionComboMode === 'add' ? !previous : true
+                                  ));
+                                }}
                                 disabled={!form.customerId}
                                 aria-haspopup="listbox"
                                 aria-expanded={showTransactionCombo}
@@ -1491,7 +1666,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                       )}
                     </tbody>
                     <tfoot>
-                      <tr className="border-t-2 border-[#ddd] bg-white text-sm font-bold">
+                      <tr className="border-t-2 border-[#cbd8e2] bg-[#f3f7fa] text-sm font-bold">
                         <td className="px-3 py-3" />
                         <td colSpan={2} className="px-3 py-3 text-slate-900 dark:text-slate-100">
                           Total Check: {peso.format(totalCheck)}

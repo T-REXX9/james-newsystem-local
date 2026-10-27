@@ -2162,7 +2162,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <XCircle className="h-5 w-5" />
               </div>
               <div>
-                <h2 id="do-not-contact-confirm-title" className="text-base font-bold text-slate-950">Mark as Do Not Contact</h2>
+                <h2 id="do-not-contact-confirm-title" className="text-base font-bold text-slate-950">Move to Blacklisted/Rejected List</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Confirm that <span className="font-semibold text-slate-900">{pendingDoNotContactRow.shopName}</span> should be moved to Do Not Contact.
                 </p>

@@ -164,17 +164,22 @@ const StockMovementView: React.FC = () => {
 
       setIsLoadingLogs(true);
       try {
-        const result = await fetchStockMovementLogs({
+        const filters = {
           item_id: selectedProduct.id,
           warehouse_id: warehouseFilter,
           transaction_type: transactionTypeFilter,
           date_from: dateFrom || undefined,
           date_to: dateTo || undefined,
           search: debouncedReferenceSearch || undefined,
-          page: 1,
           per_page: 1000,
-        });
-        setLogs(result.logs);
+        };
+        const firstPage = await fetchStockMovementLogs({ ...filters, page: 1 });
+        const allLogs = [...firstPage.logs];
+        for (let page = 2; page <= firstPage.meta.total_pages; page += 1) {
+          const result = await fetchStockMovementLogs({ ...filters, page });
+          allLogs.push(...result.logs);
+        }
+        setLogs(allLogs);
       } catch (error) {
         console.error('Error fetching inventory logs:', error);
         setLogs([]);

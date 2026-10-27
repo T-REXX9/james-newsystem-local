@@ -60,17 +60,29 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
       const viewportPadding = 8;
       const gap = 4;
       const maxDropdownHeight = 320;
+      const desiredHeight = Math.min(
+        dropdownRef.current?.scrollHeight || maxDropdownHeight,
+        maxDropdownHeight,
+      );
       const spaceAbove = Math.max(0, rect.top - viewportPadding);
       const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding);
-      const openAbove = spaceBelow < maxDropdownHeight && spaceAbove > spaceBelow;
+      const openAbove = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
       const availableHeight = openAbove ? spaceAbove : spaceBelow;
-      const dropdownHeight = Math.min(maxDropdownHeight, availableHeight);
+      const dropdownHeight = Math.min(desiredHeight, availableHeight);
+      const dropdownWidth = Math.min(
+        Math.max(rect.width, 300),
+        Math.max(window.innerWidth - viewportPadding * 2, 0),
+      );
+      const left = Math.min(
+        Math.max(rect.left, viewportPadding),
+        Math.max(window.innerWidth - dropdownWidth - viewportPadding, viewportPadding),
+      );
 
       setDropdownStyle({
         position: 'fixed',
         top: `${openAbove ? rect.top - gap - dropdownHeight : rect.bottom + gap}px`,
-        left: `${rect.left}px`,
-        width: `${Math.max(rect.width, 300)}px`,
+        left: `${left}px`,
+        width: `${dropdownWidth}px`,
         maxHeight: `${dropdownHeight}px`,
         zIndex: 9999,
       });
@@ -132,6 +144,10 @@ const CustomerAutocomplete = <T extends CustomerAutocompleteOption,>({
   useEffect(() => {
     setSelectedIndex(-1);
   }, [results]);
+
+  useEffect(() => {
+    if (showDropdown) updatePosition();
+  }, [showDropdown, updatePosition, results.length, isLoading]);
 
   const handleSelect = (customer: T) => {
     onSelect(customer);

@@ -6,15 +6,25 @@ import CustomerAutocomplete from '../CustomerAutocomplete';
 describe('CustomerAutocomplete', () => {
   const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
   const originalInnerHeight = window.innerHeight;
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
 
   afterEach(() => {
     cleanup();
     rectSpy.mockReset();
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: originalInnerHeight });
+    if (originalScrollHeight) {
+      Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+    } else {
+      Reflect.deleteProperty(HTMLElement.prototype, 'scrollHeight');
+    }
   });
 
   it('opens above the input when the lower viewport does not have enough room', async () => {
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() { return this.getAttribute('role') === 'listbox' ? 160 : 0; },
+    });
     rectSpy.mockReturnValue({
       x: 24,
       y: 500,
@@ -38,8 +48,43 @@ describe('CustomerAutocomplete', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('listbox')).toHaveStyle({
-        top: '176px',
-        maxHeight: '320px',
+        top: '336px',
+        maxHeight: '160px',
+      });
+    });
+  });
+
+  it('opens below a table field when the results fit in the remaining space', async () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 640 });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() { return this.getAttribute('role') === 'listbox' ? 160 : 0; },
+    });
+    rectSpy.mockReturnValue({
+      x: 24,
+      y: 350,
+      top: 350,
+      bottom: 388,
+      left: 24,
+      right: 244,
+      width: 220,
+      height: 38,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    render(
+      <CustomerAutocomplete
+        contacts={[{ id: 'customer-1', company: 'Customer One' }]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    fireEvent.focus(screen.getByPlaceholderText('Search customer...'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toHaveStyle({
+        top: '392px',
+        maxHeight: '160px',
       });
     });
   });

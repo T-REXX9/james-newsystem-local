@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DailyCollectionEntryView from '../DailyCollectionEntryView';
 import { dailyCollectionService } from '../../services/dailyCollectionService';
@@ -187,6 +187,79 @@ describe('DailyCollectionEntryView scrolling', () => {
     });
   });
 
+  it('lets a user change the customer on an unposted payment line', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_edit: true },
+          pages: { 'Daily Collection Entry': { can_edit: true } },
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+    vi.mocked(dailyCollectionService.getCustomers).mockImplementation(async (search) => (
+      search === 'Correct Customer'
+        ? [{ id: 'customer-2', code: 'C-2', company: 'Correct Customer' }]
+        : []
+    ));
+    vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([{
+      lrefno: 'INV-REF-2',
+      linvoice_no: 'INV-2',
+      totalAmount: 200,
+      transactionType: 'Invoice',
+    }]);
+    vi.mocked(dailyCollectionService.updateItem).mockResolvedValue({
+      lid: 1,
+      lrefno: 'REF-1',
+      lcustomer: 'customer-2',
+      lcustomer_fname: 'Correct Customer',
+      lcustomer_lname: 'C-2',
+      ltype: 'Cash',
+      lbank: '',
+      lchk_no: '',
+      lchk_date: '',
+      lamt: 1,
+      lstatus: 'Pending',
+      lremarks: '',
+      lcollect_date: '2026-08-04',
+      created_at: '',
+      lpost: 0,
+      lcollection_status: 'Pending',
+      ltransaction_no: 'INV-2',
+    });
+
+    render(<DailyCollectionEntryView />);
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    const customerInput = screen.getByDisplayValue('Customer 1');
+    fireEvent.change(customerInput, { target: { value: 'Correct Customer' } });
+    fireEvent.click(await screen.findByText('Correct Customer'));
+    fireEvent.click(await screen.findByRole('button', { name: /select transaction no/i }));
+    fireEvent.click(await within(await screen.findByRole('listbox')).findByText('INV-2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Correct Customer')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(dailyCollectionService.updateItem).toHaveBeenCalledWith(
+        expect.objectContaining({ lid: 1 }),
+        expect.objectContaining({
+          customerId: 'customer-2',
+          transactions: [{
+            transaction_type: 'Invoice',
+            transaction_refno: 'INV-REF-2',
+            transaction_no: 'INV-2',
+            transaction_amount: 200,
+          }],
+        }),
+      );
+    });
+    const updatedRow = (await screen.findByText('Correct Customer')).closest('tr');
+    expect(updatedRow).toBeTruthy();
+    expect(within(updatedRow as HTMLElement).getByText('INV-2')).toBeInTheDocument();
+  });
+
   it('shows the persisted payment line returned by the save request', async () => {
     localAuthState.session = {
       userProfile: {
@@ -241,10 +314,11 @@ describe('DailyCollectionEntryView scrolling', () => {
 
     expect(screen.getByTestId('daily-collection-detail-scroll')).toHaveClass(
       'overflow-y-auto',
-      'overflow-x-hidden',
+      'overflow-x-auto',
     );
     expect(screen.getByTestId('daily-collection-detail-scroll').querySelector('table')).toHaveClass(
       'w-full',
+      'min-w-[1450px]',
       'table-fixed',
     );
     expect(screen.getByText('INV-30')).toBeInTheDocument();

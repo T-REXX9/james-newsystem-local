@@ -1020,14 +1020,14 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView currentUser={masterUser} />);
 
     await user.click(await screen.findByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+    const dialog = await screen.findByRole('dialog', { name: 'Move to Blacklisted/Rejected List' });
 
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(within(dialog).getByText(/Priority Buyer Shop/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
     expect(updateContact).not.toHaveBeenCalled();
-    expect(screen.queryByRole('dialog', { name: 'Mark as Do Not Contact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Move to Blacklisted/Rejected List' })).not.toBeInTheDocument();
     expect(screen.getByText('Priority Buyer Shop')).toBeInTheDocument();
   });
 
@@ -1481,7 +1481,7 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView currentUser={clientUser} />);
 
     await user.click(await screen.findByRole('button', { name: 'Mark Sunny Dalapo as Do Not Contact' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Mark as Do Not Contact' });
+    const dialog = await screen.findByRole('dialog', { name: 'Move to Blacklisted/Rejected List' });
     await user.type(within(dialog).getByLabelText('Reason for Do Not Contact'), 'Client requested no further calls');
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
 

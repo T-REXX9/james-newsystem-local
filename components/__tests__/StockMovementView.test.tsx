@@ -133,6 +133,43 @@ describe('StockMovementView', () => {
     });
   });
 
+  it('loads and displays 2026 movements from later API pages', async () => {
+    const latestMovement = {
+      ...logs[0],
+      id: 'page-2-2026',
+      date: '2026-10-22T22:28:56',
+      reference_no: '20261019180038628936739360',
+      processed_by: '20261019180038628936739360',
+      notes: 'Latest page movement',
+    };
+    vi.mocked(searchStockMovementProducts).mockResolvedValue([product]);
+    vi.mocked(fetchStockMovementLogs).mockImplementation(async (filters) => ({
+      item: {},
+      logs: filters.page === 2 ? [latestMovement] : [logs[0]],
+      meta: {
+        page: filters.page || 1,
+        per_page: 1000,
+        total: 1001,
+        total_pages: 2,
+      },
+    }));
+
+    render(<StockMovementView />);
+    fireEvent.click(screen.getByRole('button', { name: /^search$/i }));
+    fireEvent.click(await screen.findByText('PN-100'));
+    fireEvent.click(screen.getByRole('button', { name: /view movement/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /legacy report/i }));
+
+    const latestRow = await screen.findByTestId('legacy-stock-movement-row-page-2-2026');
+    expect(within(latestRow).getByText('20261019180038628936739360')).toBeInTheDocument();
+    expect(fetchStockMovementLogs).toHaveBeenCalledWith(expect.objectContaining({
+      item_id: 'ITEM-1',
+      warehouse_id: 'all',
+      page: 2,
+      per_page: 1000,
+    }));
+  });
+
   it('uses old-system separate search fields before viewing movement', async () => {
     const secondProduct = {
       ...product,
