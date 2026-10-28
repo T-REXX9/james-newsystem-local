@@ -1106,10 +1106,10 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView currentUser={masterUser} />);
     expect(screen.queryByRole('button', { name: 'Do Not Call' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('checkbox', { name: 'Select all visible customers' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Select all customers in this list' }));
     expect(screen.getByText('2 selected')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Do Not Call' })).toBeInTheDocument();
-    await user.click(screen.getByRole('checkbox', { name: 'Select all visible customers' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select all customers in this list' }));
     expect(screen.getByText('0 selected')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Do Not Call' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('checkbox', { name: 'Select Priority Buyer Shop' }));
@@ -1173,7 +1173,7 @@ describe('DailyCallMasterListView', () => {
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (2)' }));
     await user.click(screen.getByRole('checkbox', { name: 'Select Batch Prospect 1' }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
-    await user.click(screen.getByRole('checkbox', { name: 'Select all visible customers' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select all customers in this list' }));
     expect(screen.getByText('2 selected')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Blacklist / Reject selected' }));
 
@@ -1226,7 +1226,7 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView currentUser={masterUser} />);
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (2)' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Select all visible customers' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select all customers in this list' }));
     await user.click(screen.getByRole('button', { name: 'Blacklist / Reject selected' }));
     const dialog = screen.getByRole('dialog', { name: 'Mark selected prospects Do Not Contact' });
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Reason for selected customers' }), 'Other');
@@ -1274,7 +1274,7 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView currentUser={agent} />);
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     expect(screen.queryByRole('checkbox', { name: 'Select Approval Prospect' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Select all visible customers' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Select all customers in this list' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Blacklist / Reject selected' })).not.toBeInTheDocument();
     expect(updateContact).not.toHaveBeenCalled();
     expect(createCustomerLogForDailyCall).not.toHaveBeenCalled();
@@ -1301,7 +1301,7 @@ describe('DailyCallMasterListView', () => {
     });
     render(<DailyCallMasterListView currentUser={masterUser} />);
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (2)' }));
-    await user.click(screen.getByRole('checkbox', { name: 'Select all visible customers' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Select all customers in this list' }));
     await user.click(screen.getByRole('button', { name: 'Blacklist / Reject selected' }));
     expect(window.history.state.__jamesDailyCallBatchDoNotContact).toBe(true);
     await user.keyboard('{Escape}');
@@ -1884,8 +1884,8 @@ describe('DailyCallMasterListView', () => {
     expect(customerCheckbox).toBeInTheDocument();
     expect(blockedCheckbox).toBeDisabled();
     expect(integrityCheckbox).toBeDisabled();
-    expect(screen.getByRole('checkbox', { name: 'Select all visible customers' })).toHaveAccessibleName('Select all visible customers');
-    expect(screen.getByText('Select all visible (2)')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Select all customers in this list' })).toHaveAccessibleName('Select all customers in this list');
+    expect(screen.getByText('Select all in list (2)')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Do Not Call' })).not.toBeInTheDocument();
 
     await user.click(prospectCheckbox);

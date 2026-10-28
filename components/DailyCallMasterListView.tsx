@@ -1,5 +1,5 @@
 import { CUSTOMER_UPDATED_EVENT } from '../utils/customerWorkflowEvents';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -1098,18 +1098,18 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const visibleRows = showingUnverifiedSubmissions ? [] : activeCategory.rows.slice(0, visibleLimit);
   const hasMoreRows = !showingUnverifiedSubmissions && visibleRows.length < activeCategory.rows.length;
   const isUnverifiedCustomerList = activeCategory.id === 'unverified' && !showingUnverifiedSubmissions;
-  // Selection is scoped to the currently displayed customer rows. Duplicate
-  // submissions are rendered in their separate tab and never enter visibleRows.
+  // Duplicate submissions are rendered in their separate tab and never enter
+  // the customer selection scope.
   const selectedUnverifiedRows = rows.filter((row) => selectedUnverifiedIds.has(row.id));
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
   const selectableDoNotCallRows = showMasterActions && !showingUnverifiedSubmissions
-    ? visibleRows.filter((row) => !row.dataIntegrityException && !isBlockedDailyCallMasterRow(row))
+    ? activeCategory.rows.filter((row) => !row.dataIntegrityException && !isBlockedDailyCallMasterRow(row))
     : [];
   const selectedMasterRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) || selectedUnverifiedIds.has(row.id));
   const selectedDoNotCallRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
   const canBatchBlacklistSelection = selectedMasterRows.length > 0
     && selectedMasterRows.every((row) => selectedUnverifiedIds.has(row.id));
-  const allVisibleDoNotCallSelected = selectableDoNotCallRows.length > 0
+  const allSelectableDoNotCallRowsSelected = selectableDoNotCallRows.length > 0
     && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
   // Keep the master-user access and either supported customer database page grant,
   // but do not treat missing action metadata as permission.
@@ -1122,26 +1122,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       || customerActionPages?.['Customer Data']?.can_edit === true
       || customerActionPages?.['Customer Database']?.can_edit === true);
 
-  const handleToggleAllVisibleDoNotCall = useCallback(() => {
-    setSelectedDoNotCallIds((current) => {
-      const next = new Set(current);
-      const allSelected = selectableDoNotCallRows.length > 0
-        && selectableDoNotCallRows.every((row) => next.has(row.id));
-      for (const row of selectableDoNotCallRows) {
-        if (allSelected) next.delete(row.id);
-        else next.add(row.id);
-      }
-      return next;
-    });
-    setSelectedUnverifiedIds((current) => {
-      const next = new Set(current);
-      const allSelected = selectableDoNotCallRows.length > 0
-        && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
-      for (const row of selectableDoNotCallRows) {
-        if (allSelected) next.delete(row.id);
-        else if (isProspectRow(row) && String(row.verification || '').trim().toLowerCase() !== 'verified') next.add(row.id);
-      }
-      return next;
+  const handleToggleAllDoNotCall = useCallback(() => {
+    const allSelected = selectableDoNotCallRows.length > 0
+      && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
+    startTransition(() => {
+      setSelectedDoNotCallIds((current) => {
+        const next = new Set(current);
+        for (const row of selectableDoNotCallRows) {
+          if (allSelected) next.delete(row.id);
+          else next.add(row.id);
+        }
+        return next;
+      });
+      setSelectedUnverifiedIds((current) => {
+        const next = new Set(current);
+        for (const row of selectableDoNotCallRows) {
+          if (allSelected) next.delete(row.id);
+          else if (isProspectRow(row) && String(row.verification || '').trim().toLowerCase() !== 'verified') next.add(row.id);
+        }
+        return next;
+      });
     });
   }, [selectableDoNotCallRows, selectedDoNotCallIds]);
 
@@ -1711,13 +1711,13 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <label className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-slate-700">
                   <input
                     type="checkbox"
-                    aria-label="Select all visible customers"
-                    checked={allVisibleDoNotCallSelected}
+                    aria-label="Select all customers in this list"
+                    checked={allSelectableDoNotCallRowsSelected}
                     disabled={selectableDoNotCallRows.length === 0 || savingBulkDoNotCall || savingBatchDoNotContact}
-                    onChange={handleToggleAllVisibleDoNotCall}
+                    onChange={handleToggleAllDoNotCall}
                     className="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500"
                   />
-                  Select all visible ({selectableDoNotCallRows.length})
+                  Select all in list ({selectableDoNotCallRows.length})
                 </label>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedDoNotCallRows.length} selected</span>
