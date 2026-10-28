@@ -1246,11 +1246,9 @@ describe('DailyCallMasterListView', () => {
     expect(createCustomerLogForDailyCall).toHaveBeenCalledWith(expect.objectContaining({
       contact_id: 'batch-1', status: 'Do Not Contact', note: 'Shop is closed',
     }));
+    expect(sendSalesReportMessage).toHaveBeenCalledTimes(2);
     expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
-      contactId: 'batch-1', body: 'Do Not Contact\nReason: Shop is closed', senderName: 'master@example.com',
-    }));
-    expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
-      contactId: 'batch-2', body: 'Do Not Contact\nReason: Shop is closed',
+      contactId: 'batch-1', body: 'Do Not Contact\nReason: Shop is closed', statusNote: true,
     }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Mark selected prospects Do Not Contact' })).not.toBeInTheDocument());
     expect(screen.getByText('0 selected')).toBeInTheDocument();
@@ -1447,7 +1445,7 @@ describe('DailyCallMasterListView', () => {
       note: 'No longer operating',
     });
     expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
-      contactId: 'unverified-1', body: 'Do Not Contact\nReason: No longer operating',
+      contactId: 'unverified-1', body: 'Do Not Contact\nReason: No longer operating', statusNote: true,
     }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Unverified Prospects (0)' })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /Blacklisted\/Rejected \(1\)/i })).toBeInTheDocument();

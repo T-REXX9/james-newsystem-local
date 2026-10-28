@@ -62,11 +62,13 @@ const sendDoNotContactSalesReportEntry = (
   contactId: string,
   reason: string,
   currentUser: UserProfile | null | undefined,
-  isRequest = false
+  isRequest = false,
+  isStatusNote = false
 ) => sendSalesReportMessage({
   contactId,
   body: `${isRequest ? 'Do Not Contact request' : 'Do Not Contact'}\nReason: ${reason}`,
   senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+  statusNote: isStatusNote,
 });
 
 const peso = new Intl.NumberFormat('en-PH', {
@@ -884,7 +886,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         note: reason,
       });
       try {
-        await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
+        await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, false, true);
       } catch {
         addToast({
           type: 'warning',
@@ -1250,7 +1252,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           note: reason,
         });
         try {
-          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
+          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, false, true);
         } catch {
           salesReportEntryFailures.push(row.shopName);
         }

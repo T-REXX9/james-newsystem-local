@@ -1101,6 +1101,7 @@ export const sendSalesReportMessage = async (input: {
   contactId: string;
   body?: string;
   senderName: string;
+  statusNote?: boolean;
   attachmentUrl?: string | null;
   attachmentMime?: string | null;
 }): Promise<SalesReportConversationMessage> => {
@@ -1113,6 +1114,7 @@ export const sendSalesReportMessage = async (input: {
         main_id: resolveMainId(),
         body: input.body || '',
         sender_name: input.senderName,
+        status_note: input.statusNote || undefined,
         attachment_url: input.attachmentUrl || undefined,
         attachment_mime: input.attachmentMime || undefined,
       }),
