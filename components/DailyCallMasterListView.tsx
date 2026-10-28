@@ -1100,15 +1100,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const isUnverifiedCustomerList = activeCategory.id === 'unverified' && !showingUnverifiedSubmissions;
   // Duplicate submissions are rendered in their separate tab and never enter
   // the customer selection scope.
-  const selectedUnverifiedRows = rows.filter((row) => selectedUnverifiedIds.has(row.id));
   const showMasterActions = canUseMasterDailyCallActions(currentUser);
   const selectableDoNotCallRows = showMasterActions && !showingUnverifiedSubmissions
     ? activeCategory.rows.filter((row) => !row.dataIntegrityException && !isBlockedDailyCallMasterRow(row))
     : [];
   const selectedMasterRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) || selectedUnverifiedIds.has(row.id));
   const selectedDoNotCallRows = rows.filter((row) => selectedDoNotCallIds.has(row.id) && !row.dataIntegrityException);
-  const canBatchBlacklistSelection = selectedMasterRows.length > 0
-    && selectedMasterRows.every((row) => selectedUnverifiedIds.has(row.id));
   const allSelectableDoNotCallRowsSelected = selectableDoNotCallRows.length > 0
     && selectableDoNotCallRows.every((row) => selectedDoNotCallIds.has(row.id));
   // Keep the master-user access and either supported customer database page grant,
@@ -1213,8 +1210,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     return () => window.removeEventListener('keydown', handleEscape);
   }, [closeBatchDoNotContactModal, showBatchDoNotContactModal]);
 
-  const handleConfirmBatchDoNotContact = useCallback(async () => {
-    const selectedIds = selectedUnverifiedRows.map((row) => row.id);
+  const handleConfirmBatchBlacklist = useCallback(async () => {
+    const rowsToBlacklist = selectedMasterRows;
+    const selectedIds = rowsToBlacklist.map((row) => row.id);
     const reason = batchDoNotContactReasonOption === 'Other'
       ? batchDoNotContactCustomReason.trim()
       : batchDoNotContactReasonOption.trim();
@@ -1222,42 +1220,47 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
 
     setSavingBatchDoNotContact(true);
     const salesReportEntryFailures: string[] = [];
-    const results = await Promise.allSettled(selectedUnverifiedRows.map(async (row) => {
-      // Selection is only available from the Unverified customers bucket.
-      const shouldRejectProspect = true;
-      const updates = {
-        status: CustomerStatus.BLACKLISTED,
-        debtType: 'Bad' as const,
-        ...(shouldRejectProspect ? { verification: 'Rejected' } : {}),
-      };
-      // Batch status changes follow the same approval path as the single-row
-      // action; direct prospect editing does not authorize a status transition.
-      if (!isMasterUserAccount(currentUser)) {
-        await requestCustomerUpdate(row.id, { ...updates, comment: reason });
+    const results: PromiseSettledResult<void>[] = [];
+    for (let start = 0; start < rowsToBlacklist.length; start += 10) {
+      const batch = rowsToBlacklist.slice(start, start + 10);
+      results.push(...await Promise.allSettled(batch.map(async (row) => {
+        const shouldRejectProspect = isProspectRow(row) && !isVerifiedByWorkflow(row);
+        const updates = {
+          status: CustomerStatus.BLACKLISTED,
+          debtType: 'Bad' as const,
+          ...(shouldRejectProspect ? { verification: 'Rejected' } : {}),
+        };
+        // Protected status changes continue through the existing approval path
+        // for staff; Master Users can apply the update directly.
+        if (!isMasterUserAccount(currentUser)) {
+          await requestCustomerUpdate(row.id, { ...updates, comment: reason });
+          try {
+            await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, true);
+          } catch {
+            salesReportEntryFailures.push(row.shopName);
+          }
+          return;
+        }
+        await updateContact(row.id, updates, currentUser?.id);
+        await createCustomerLogForDailyCall({
+          contact_id: row.id,
+          entry_type: 'Status',
+          topic: 'Status',
+          status: 'Do Not Contact',
+          note: reason,
+        });
         try {
-          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser, true);
+          await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
         } catch {
           salesReportEntryFailures.push(row.shopName);
         }
-        return;
-      }
-      await updateContact(row.id, updates, currentUser?.id);
-      await createCustomerLogForDailyCall({
-        contact_id: row.id,
-        entry_type: 'Status',
-        topic: 'Status',
-        status: 'Do Not Contact',
-        note: reason,
-      });
-      try {
-        await sendDoNotContactSalesReportEntry(row.id, reason, currentUser);
-      } catch {
-        salesReportEntryFailures.push(row.shopName);
-      }
-    }));
+      })));
+    }
     const succeededIds = selectedIds.filter((_, index) => results[index].status === 'fulfilled');
-    const failedRows = selectedUnverifiedRows.filter((_, index) => results[index].status === 'rejected');
-    setSelectedUnverifiedIds(new Set(failedRows.map((row) => row.id)));
+    const failedRows = rowsToBlacklist.filter((_, index) => results[index].status === 'rejected');
+    setSelectedUnverifiedIds(new Set(failedRows
+      .filter((row) => isProspectRow(row) && !isVerifiedByWorkflow(row))
+      .map((row) => row.id)));
     setSelectedDoNotCallIds(new Set(failedRows.filter((row) => !row.dataIntegrityException).map((row) => row.id)));
     setSavingBatchDoNotContact(false);
     setBatchDoNotContactReasonOption('');
@@ -1277,11 +1280,17 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     }
     await loadRows(false, true);
     if (failedRows.length === 0) {
-      addToast({
-        type: 'success',
-        title: 'Customers marked Do Not Contact',
-        description: `${succeededIds.length} customer${succeededIds.length === 1 ? '' : 's'} updated successfully.`,
-      });
+      addToast(isMasterUserAccount(currentUser)
+        ? {
+            type: 'success',
+            title: 'Customers moved to Blacklisted/Rejected',
+            description: `${succeededIds.length} customer${succeededIds.length === 1 ? '' : 's'} updated successfully.`,
+          }
+        : {
+            type: 'success',
+            title: 'Change requests submitted',
+            description: `${succeededIds.length} customer change request${succeededIds.length === 1 ? '' : 's'} are waiting for Master User approval.`,
+          });
     } else {
       addToast({
         type: succeededIds.length > 0 ? 'warning' : 'error',
@@ -1298,7 +1307,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         durationMs: 7000,
       });
     }
-  }, [addToast, batchDoNotContactCustomReason, batchDoNotContactReasonOption, currentUser, loadRows, savingBatchDoNotContact, selectedUnverifiedRows]);
+  }, [addToast, batchDoNotContactCustomReason, batchDoNotContactReasonOption, currentUser, loadRows, savingBatchDoNotContact, selectedMasterRows]);
 
   const handleAssignTeamToCategory = useCallback(async () => {
     if (!selectedAssignmentTeamId || actionableCategoryRows.length === 0) return;
@@ -1720,15 +1729,26 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   Select all in list ({selectableDoNotCallRows.length})
                 </label>
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedDoNotCallRows.length} selected</span>
-                  {canBatchBlacklistSelection && <button
+                  <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedMasterRows.length} selected</span>
+                  {selectedMasterRows.length > 0 && <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDoNotCallIds(new Set());
+                      setSelectedUnverifiedIds(new Set());
+                    }}
+                    disabled={savingBulkDoNotCall || savingBatchDoNotContact}
+                    className="inline-flex min-h-9 items-center rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Clear selection
+                  </button>}
+                  {selectedMasterRows.length > 0 && <button
                     type="button"
                     onClick={() => {
                       setBatchDoNotContactReasonOption('');
                       setBatchDoNotContactCustomReason('');
                       setShowBatchDoNotContactModal(true);
                     }}
-                    disabled={savingBatchDoNotContact}
+                    disabled={savingBatchDoNotContact || savingBulkDoNotCall}
                     className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-rose-700 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <XCircle className="h-4 w-4" />
@@ -2303,10 +2323,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
             <div className="flex items-start gap-3">
               <div className="mt-0.5 rounded-full bg-rose-50 p-2 text-rose-600"><XCircle className="h-5 w-5" /></div>
               <div className="min-w-0 flex-1">
-                <h2 id="batch-do-not-contact-title" className="text-base font-bold text-slate-950">Mark selected prospects Do Not Contact</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">This will apply one reason to {selectedUnverifiedRows.length} selected customer{selectedUnverifiedRows.length === 1 ? '' : 's'}. Unverified prospects will be marked Rejected.</p>
+                <h2 id="batch-do-not-contact-title" className="text-base font-bold text-slate-950">Move selected customers to Blacklisted/Rejected</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">This will apply one reason to {selectedMasterRows.length} selected customer{selectedMasterRows.length === 1 ? '' : 's'}. Customers will be marked Blacklisted with Bad debt; unverified prospects will also be marked Rejected.</p>
                 <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="batch-do-not-contact-reason">
-                  Reason <span className="text-rose-600">*</span>
+                  Reason for selected customers <span className="text-rose-600">*</span>
                   <select
                     id="batch-do-not-contact-reason"
                     aria-label="Reason for selected customers"
@@ -2347,12 +2367,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               >Cancel</button>
               <button
                 type="button"
-                onClick={() => void handleConfirmBatchDoNotContact()}
-                disabled={savingBatchDoNotContact || selectedUnverifiedRows.length === 0 || !batchDoNotContactReasonOption || (batchDoNotContactReasonOption === 'Other' && !batchDoNotContactCustomReason.trim())}
+                onClick={() => void handleConfirmBatchBlacklist()}
+                disabled={savingBatchDoNotContact || selectedMasterRows.length === 0 || !batchDoNotContactReasonOption || (batchDoNotContactReasonOption === 'Other' && !batchDoNotContactCustomReason.trim())}
                 className="inline-flex min-h-9 items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {savingBatchDoNotContact && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {savingBatchDoNotContact ? 'Updating customers…' : `Mark ${selectedUnverifiedRows.length} Do Not Contact`}
+                {savingBatchDoNotContact ? 'Updating customers…' : `Move ${selectedMasterRows.length} to Blacklisted/Rejected`}
               </button>
             </div>
           </section>
