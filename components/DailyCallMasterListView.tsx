@@ -21,6 +21,12 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
+import PersonOffIcon from '@mui/icons-material/PersonOff';
+import EditIcon from '@mui/icons-material/Edit';
+import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import BlockIcon from '@mui/icons-material/Block';
+import CallIcon from '@mui/icons-material/Call';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, setCustomerStarred, updateContact } from '../services/customerDatabaseLocalApiService';
 import { createDuplicateProspectRequest, fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
@@ -455,7 +461,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [savingStarId, setSavingStarId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
-  const [doNotContactReason, setDoNotContactReason] = useState('');
+  const [doNotContactReasonOption, setDoNotContactReasonOption] = useState('');
+  const [doNotContactCustomReason, setDoNotContactCustomReason] = useState('');
   const [pendingDoNotCallRow, setPendingDoNotCallRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotCallReason, setDoNotCallReason] = useState('');
   const [doNotCallReasonOption, setDoNotCallReasonOption] = useState('');
@@ -836,7 +843,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const handleConfirmDoNotContact = useCallback(async () => {
     const row = pendingDoNotContactRow;
     if (!row) return;
-    const reason = doNotContactReason.trim();
+    const reason = doNotContactReasonOption === 'Other'
+      ? doNotContactCustomReason.trim()
+      : doNotContactReasonOption.trim();
     if (!reason) {
       addToast({
         type: 'error',
@@ -873,7 +882,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           title: 'Change request submitted',
           description: 'The Do Not Contact change is waiting for Master User approval.',
         });
-        setDoNotContactReason('');
+        setDoNotContactReasonOption('');
+        setDoNotContactCustomReason('');
         setPendingDoNotContactRow(null);
         return;
       }
@@ -905,7 +915,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
           : item
       ));
       await loadRows(false, true);
-      setDoNotContactReason('');
+      setDoNotContactReasonOption('');
+      setDoNotContactCustomReason('');
       setPendingDoNotContactRow(null);
     } catch {
       addToast({
@@ -916,7 +927,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setLoadingCustomerId(null);
     }
-  }, [addToast, currentUser, doNotContactReason, loadRows, pendingDoNotContactRow]);
+  }, [addToast, currentUser, doNotContactCustomReason, doNotContactReasonOption, loadRows, pendingDoNotContactRow]);
 
   useEffect(() => {
     // Sales totals must not be rendered from an in-memory list from a
@@ -2052,7 +2063,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           {isVerifiedByWorkflow(row) ? (row.verifiedBy || 'Verification recorded') : '—'}
                         </td>
                         <td className="w-[240px] px-2 py-2.5">
-                          <div className="flex w-full flex-nowrap items-center justify-center gap-1.5">
+                          <div className="flex w-full flex-wrap items-center justify-center gap-1.5">
                             {isMasterUserType(currentUser) && !row.dataIntegrityException && (
                               <button
                                 type="button"
@@ -2061,69 +2072,69 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                 title={row.doNotContact ? 'Remove Do Not Call mark' : 'Mark Do Not Call'}
                                 onClick={() => void handleToggleDoNotCall(row)}
                                 disabled={savingDoNotCallId === row.id}
-                                className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1.5 text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 disabled:opacity-60 ${row.doNotContact ? 'border-red-600 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'}`}
+                                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:cursor-wait disabled:opacity-60 ${row.doNotContact ? 'border-red-600 bg-red-700 text-white hover:bg-red-800' : 'border-red-300 bg-red-50 text-red-700 hover:bg-red-100'}`}
                               >
-                                {savingDoNotCallId === row.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <UserX className="h-3.5 w-3.5" aria-hidden="true" />}
-                                <span>{row.doNotContact ? 'Remove Do Not Call' : 'Mark Do Not Call'}</span>
+                                {savingDoNotCallId === row.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <PersonOffIcon className="h-4 w-4" aria-hidden="true" />}
                               </button>
                             )}
-                            {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
-                              && isProspectRow(row)
-                              && !isVerifiedByWorkflow(row)
-                              && !viewOnlyRow && (
-                              <button
+                            <div className="contents">
+                              {activeCategory.id === 'unverified' && canDirectlyEditUnverifiedProspect(currentUser, row)
+                                && isProspectRow(row)
+                                && !isVerifiedByWorkflow(row)
+                                && !viewOnlyRow && (
+                                <button
                                 type="button"
                                 aria-label={`Edit ${row.shopName}`}
                                 title={`Edit ${row.shopName}`}
                                 onClick={() => void handleEditUnverifiedProspect(row)}
                                 disabled={loadingCustomerId === row.id || loadingProspectEdit}
-                                className="shrink-0 rounded-full border border-blue-200 p-1.5 text-blue-600 transition hover:bg-blue-50 disabled:opacity-60"
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-blue-200 text-blue-600 transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 disabled:opacity-60"
                               >
-                                {loadingProspectEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                                {loadingProspectEdit ? <Loader2 className="h-4 w-4 animate-spin" /> : <EditIcon className="h-4 w-4" aria-hidden="true" />}
                               </button>
-                            )}
-                            {activeCategory.id === 'unverified' && showMasterActions && isProspectRow(row)
-                              && !isVerifiedByWorkflow(row) && (
-                              <><button
+                              )}
+                              {activeCategory.id === 'unverified' && showMasterActions && isProspectRow(row)
+                                && !isVerifiedByWorkflow(row) && (
+                                <><button
                                 type="button"
                                 aria-label={`Verify prospect for ${row.shopName}`}
                                 title={`Verify ${row.shopName} prospect`}
                                 onClick={() => void handleVerifyExistingProspect(row)}
                                 disabled={loadingCustomerId === row.id}
-                                className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-center text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60"
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-300 bg-emerald-50 text-emerald-800 transition hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:cursor-wait disabled:opacity-60"
                               >
                                 {loadingCustomerId === row.id
                                   ? <Loader2 className="h-4 w-4 animate-spin" />
-                                  : <UserRoundCheck className="h-4 w-4" />}
-                                Verify
+                                  : <VerifiedUserIcon className="h-4 w-4" aria-hidden="true" />}
                               </button>
                               </>
-                            )}
-                            {viewOnlyRow ? (
-                              <button
+                              )}
+                              {viewOnlyRow ? (
+                                <button
                                 type="button"
                                 aria-label={`View ${row.shopName}`}
                                 title={`View-only record for ${row.shopName}`}
                                 onClick={() => openCustomerDetails(row, 'overview')}
                                 disabled={loadingCustomerId === row.id}
-                                className="shrink-0 rounded-full border border-red-200 p-1.5 text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-200 text-red-600 transition hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1 disabled:opacity-60"
                               >
-                                <Eye className="h-4 w-4" />
+                                <VisibilityIcon className="h-4 w-4" aria-hidden="true" />
                               </button>
-                            ) : canEditCustomerDatabase ? (
-                              <>
+                              ) : canEditCustomerDatabase ? (
+                                <>
                                 <button
                                   type="button"
-                                  aria-label={`Mark ${row.shopName} as Do Not Contact`}
-                                  title={`Mark ${row.shopName} as Do Not Contact`}
+                                  aria-label={`Blacklist or reject ${row.shopName}`}
+                                  title={`Blacklist / Reject ${row.shopName}`}
                                   onClick={() => {
-                                    setDoNotContactReason('');
+                                    setDoNotContactReasonOption('');
+                                    setDoNotContactCustomReason('');
                                     setPendingDoNotContactRow(row);
                                   }}
                                   disabled={loadingCustomerId === row.id}
-                                  className="shrink-0 rounded-full border border-rose-200 p-1.5 text-rose-600 transition hover:bg-rose-50 disabled:opacity-60"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rose-200 text-rose-600 transition hover:bg-rose-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-1 disabled:opacity-60"
                                 >
-                                  <XCircle className="h-4 w-4" />
+                                  <BlockIcon className="h-4 w-4" aria-hidden="true" />
                                 </button>
                                 <button
                                   type="button"
@@ -2131,23 +2142,24 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                                   title={`Open call details for ${row.shopName}`}
                                   onClick={() => openCustomerDetails(row, 'overview')}
                                   disabled={loadingCustomerId === row.id}
-                                  className="shrink-0 rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:opacity-60"
                                 >
-                                  <Phone className="h-4 w-4" />
+                                  <CallIcon className="h-4 w-4" aria-hidden="true" />
                                 </button>
-                              </>
-                            ) : (
-                              <button
+                                </>
+                              ) : (
+                                <button
                                 type="button"
                                 aria-label={`Call ${row.shopName}`}
                                 title={`Open call details for ${row.shopName}`}
                                 onClick={() => openCustomerDetails(row, 'overview')}
                                 disabled={loadingCustomerId === row.id}
-                                className="shrink-0 rounded-full border border-emerald-200 p-1.5 text-emerald-600 transition hover:bg-emerald-50 disabled:opacity-60"
+                                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 disabled:opacity-60"
                               >
-                                <Phone className="h-4 w-4" />
+                                <CallIcon className="h-4 w-4" aria-hidden="true" />
                               </button>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -2193,16 +2205,32 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 </p>
                 <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-reason">
                   Reason for Do Not Contact <span className="text-rose-600">*</span>
-                  <textarea
+                  <select
                     id="do-not-contact-reason"
                     aria-label="Reason for Do Not Contact"
-                    value={doNotContactReason}
-                    onChange={(event) => setDoNotContactReason(event.target.value)}
-                    placeholder="Explain why this customer should not be contacted"
-                    rows={3}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
-                  />
+                    value={doNotContactReasonOption}
+                    onChange={(event) => setDoNotContactReasonOption(event.target.value)}
+                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="">Choose a reason</option>
+                    {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                  </select>
                 </label>
+                {doNotContactReasonOption === 'Other' && (
+                  <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-custom-reason">
+                    Your reason <span className="text-rose-600">*</span>
+                    <textarea
+                      id="do-not-contact-custom-reason"
+                      aria-label="Other Do Not Contact reason"
+                      value={doNotContactCustomReason}
+                      onChange={(event) => setDoNotContactCustomReason(event.target.value)}
+                      maxLength={2000}
+                      rows={3}
+                      placeholder="State your reason"
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                    />
+                  </label>
+                )}
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -2217,7 +2245,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <button
                 type="button"
                 onClick={handleConfirmDoNotContact}
-                disabled={loadingCustomerId === pendingDoNotContactRow.id || !doNotContactReason.trim()}
+                disabled={loadingCustomerId === pendingDoNotContactRow.id || !doNotContactReasonOption || (doNotContactReasonOption === 'Other' && !doNotContactCustomReason.trim())}
                 className="inline-flex items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
               >
                 {loadingCustomerId === pendingDoNotContactRow.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

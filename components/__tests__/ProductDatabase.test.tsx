@@ -5,13 +5,16 @@ import ProductDatabase from '../ProductDatabase';
 import type { Product } from '../../types';
 
 const fetchProductsPageMock = vi.fn();
+const fetchProductCreateOptionsMock = vi.fn();
+const createProductMock = vi.fn();
 const searchStockMovementProductsMock = vi.fn();
 const fetchProductMovementClassificationsMock = vi.fn();
 
 vi.mock('../../services/productLocalApiService', () => ({
   fetchProductsPage: (...args: any[]) => fetchProductsPageMock(...args),
+  fetchProductCreateOptions: (...args: any[]) => fetchProductCreateOptionsMock(...args),
   fetchProductById: vi.fn(),
-  createProduct: vi.fn(),
+  createProduct: (...args: any[]) => createProductMock(...args),
   updateProduct: vi.fn(),
   deleteProduct: vi.fn(),
 }));
@@ -108,8 +111,59 @@ describe('ProductDatabase', () => {
         total_pages: 1,
       },
     });
+    fetchProductCreateOptionsMock.mockResolvedValue({
+      codePrefixes: [{ id: 10, name: 'QK-' }, { id: 11, name: 'FG' }],
+      priceGroups: [],
+    });
+    createProductMock.mockResolvedValue(undefined);
     searchStockMovementProductsMock.mockResolvedValue([]);
     fetchProductMovementClassificationsMock.mockResolvedValue(new Map());
+  });
+
+  it('submits the selected legacy prefix so the API can assign its next running number', async () => {
+    render(<ProductDatabase currentUser={{ id: 'owner-1', role: 'Owner' } as any} initialCreate />);
+
+    const codeSelect = await screen.findByDisplayValue('Select Item Code Prefix');
+    expect(codeSelect).toHaveValue('');
+    expect(within(codeSelect).getByRole('option', { name: 'QK-' })).toHaveValue('QK-');
+
+    fireEvent.change(codeSelect, { target: { value: 'QK-' } });
+    fireEvent.change(screen.getByPlaceholderText('Input Part Number'), { target: { value: 'QK-TEST-001' } });
+    fireEvent.change(screen.getByPlaceholderText('Input Description'), { target: { value: 'Running number test item' } });
+    fireEvent.change(screen.getByPlaceholderText('Input Replenish Qty'), { target: { value: '7' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await vi.waitFor(() => expect(createProductMock).toHaveBeenCalledTimes(1));
+    expect(createProductMock).toHaveBeenCalledWith(expect.objectContaining({
+      part_no: 'QK-TEST-001',
+      product_code_prefix: 'QK-',
+      create_product_code_prefix: false,
+      description: 'Running number test item',
+      replenish_quantity: 7,
+    }));
+  });
+
+  it('allows a new prefix to be entered and submits it as a new legacy code prefix', async () => {
+    fetchProductCreateOptionsMock
+      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-' }], priceGroups: [] })
+      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-' }, { id: 12, name: 'NEW-' }], priceGroups: [] });
+    render(<ProductDatabase currentUser={{ id: 'owner-1', role: 'Owner' } as any} initialCreate />);
+
+    fireEvent.change(await screen.findByDisplayValue('Select Item Code Prefix'), {
+      target: { value: '__add_product_code_prefix__' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Input New Code'), { target: { value: 'NEW-' } });
+    fireEvent.change(screen.getByPlaceholderText('Input Part Number'), { target: { value: 'QK-NEW-001' } });
+    fireEvent.change(screen.getByPlaceholderText('Input Description'), { target: { value: 'New prefix test item' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    await vi.waitFor(() => expect(createProductMock).toHaveBeenCalledTimes(1));
+    expect(createProductMock).toHaveBeenCalledWith(expect.objectContaining({
+      product_code_prefix: 'NEW-',
+      create_product_code_prefix: true,
+    }));
+    expect(await screen.findByRole('option', { name: 'NEW-' })).toBeInTheDocument();
+    expect(fetchProductCreateOptionsMock).toHaveBeenCalledTimes(2);
   });
 
   afterEach(() => {

@@ -10,10 +10,13 @@ import { fetchCategories, type CategoryRecord } from '../services/categoryLocalA
 import {
   createProduct,
   deleteProduct,
+  fetchProductCreateOptions,
   fetchProductById,
   fetchProductsPage,
   updateProduct,
   type ProductListStatus,
+  type ProductCodePrefix,
+  type ProductPriceGroup,
 } from '../services/productLocalApiService';
 import { clearNotListedRemarks } from '../services/suggestedStockService';
 import { fetchSuppliers } from '../services/supplierService';
@@ -82,6 +85,7 @@ const EMPTY_PRODUCT: ProductForm = {
   brand: '',
   barcode: '',
   no_of_pieces_per_box: 0,
+  replenish_quantity: 0,
   item_code: '',
   description: '',
   size: '',
@@ -117,6 +121,8 @@ const EMPTY_PRODUCT: ProductForm = {
 };
 
 const inputClass = 'h-[38px] w-full rounded-[3px] border border-[#ccc] bg-white px-3 text-[14px] text-[#333] outline-none focus:border-[#5d82a2]';
+const ADD_PRODUCT_CODE_PREFIX = '__add_product_code_prefix__';
+const ADD_PRODUCT_CATEGORY = '__add_product_category__';
 
 const money = (value?: number) => Number(value || 0).toLocaleString(undefined, {
   minimumFractionDigits: 2,
@@ -213,6 +219,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const [appliedFilters, setAppliedFilters] = useState<LegacyFilters>({ ...EMPTY_FILTERS });
   const [statusFilter, setStatusFilter] = useState<ProductListStatus>('active');
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [productCodePrefixes, setProductCodePrefixes] = useState<ProductCodePrefix[]>([]);
+  const [priceGroups, setPriceGroups] = useState<ProductPriceGroup[]>([]);
+  const [priceGroupAmounts, setPriceGroupAmounts] = useState<Record<string, number>>({});
+  const [productCodePrefix, setProductCodePrefix] = useState('');
+  const [newProductCodePrefix, setNewProductCodePrefix] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierRows, setSelectedSupplierRows] = useState<number[]>([]);
   const [applyCostToAll, setApplyCostToAll] = useState(false);
@@ -301,14 +313,20 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   useEffect(() => {
-    void Promise.all([fetchCategories(), fetchSuppliers()])
-      .then(([categoryResult, supplierResult]) => {
+    void Promise.all([fetchCategories(), fetchSuppliers(), fetchProductCreateOptions()])
+      .then(([categoryResult, supplierResult, createOptions]) => {
         setCategories(categoryResult.items);
         setSuppliers(supplierResult);
+        setProductCodePrefixes(createOptions.codePrefixes);
+        setPriceGroups(createOptions.priceGroups);
+        setPriceGroupAmounts(Object.fromEntries(createOptions.priceGroups.map((group) => [group.name, 0])));
       })
       .catch(() => {
         setCategories([]);
         setSuppliers([]);
+        setProductCodePrefixes([]);
+        setPriceGroups([]);
+        setPriceGroupAmounts({});
       });
   }, []);
 
@@ -331,10 +349,13 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
       supplier_costs: [],
       part_no: initialPartNo,
       description: initialDescription,
-      item_code: initialItemCode,
       // Suggested Stock handoff: require a reorder level so the SKU can appear on Reorder Report.
       reorder_quantity: fromSuggestedStock ? Math.max(1, Number(EMPTY_PRODUCT.reorder_quantity) || 1) : 0,
     });
+    setProductCodePrefix('');
+    setNewProductCodePrefix('');
+    setNewProductCategory('');
+    setPriceGroupAmounts(Object.fromEntries(priceGroups.map((group) => [group.name, 0])));
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
     setSubmitError('');
@@ -376,6 +397,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const clearEditor = () => {
     setEditingProduct(null);
     setFormData({ ...EMPTY_PRODUCT, supplier_costs: [] });
+    setProductCodePrefix('');
+    setNewProductCodePrefix('');
+    setNewProductCategory('');
+    setPriceGroupAmounts(Object.fromEntries(priceGroups.map((group) => [group.name, 0])));
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
     setSubmitError('');
@@ -387,7 +412,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const validateForm = (mode: 'add' | 'edit') => {
     const errors: Record<string, string> = {};
     const partNo = validateRequired(formData.part_no, 'a part number');
-    const itemCode = validateRequired(formData.item_code, 'an item code');
+    const selectedPrefix = productCodePrefix === ADD_PRODUCT_CODE_PREFIX ? newProductCodePrefix : productCodePrefix;
+    const itemCode = validateRequired(selectedPrefix, 'an item code prefix');
     const description = validateRequired(formData.description, 'a description');
     const descriptionLength = validateMinLength(formData.description, 'description', 3);
     if (!partNo.isValid) errors.part_no = partNo.message;
@@ -399,15 +425,12 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const buildPayload = () => {
-    // Reorder quantity is the sole stocking control. Do not carry the retired
-    // replenish value forward when an existing product is saved.
-    const { replenish_quantity: _replenishQuantity, ...productPayload } = formData;
     return {
-    ...productPayload,
-    part_no: String(formData.part_no || '').replace(/\s+/g, ''),
-    item_code: String(formData.item_code || '').trim(),
-    supplier_costs: formData.supplier_costs || [],
-    apply_cost_to_all_part_no: applyCostToAll,
+      ...formData,
+      part_no: String(formData.part_no || '').replace(/\s+/g, ''),
+      item_code: String(formData.item_code || '').trim(),
+      supplier_costs: formData.supplier_costs || [],
+      apply_cost_to_all_part_no: applyCostToAll,
     };
   };
 
@@ -425,7 +448,22 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     const applyToAllPartNo = mode === 'edit' && Boolean(payload.apply_cost_to_all_part_no);
     try {
       if (mode === 'add') {
-        await createProduct(payload);
+        await createProduct({
+          ...payload,
+          product_code_prefix: productCodePrefix === ADD_PRODUCT_CODE_PREFIX ? newProductCodePrefix.trim() : productCodePrefix,
+          create_product_code_prefix: productCodePrefix === ADD_PRODUCT_CODE_PREFIX,
+          suggested_inquiry_item_id: fromSuggestedStock ? initialSuggestedInquiryItemId : '',
+          suggested_part_no: fromSuggestedStock ? initialPartNo : '',
+          ...(priceGroups.length > 0 ? { price_group_amounts: priceGroupAmounts } : {}),
+          category: formData.category === ADD_PRODUCT_CATEGORY ? newProductCategory.trim() : formData.category,
+          create_category: formData.category === ADD_PRODUCT_CATEGORY,
+        });
+        try {
+          const refreshedCreateOptions = await fetchProductCreateOptions();
+          setProductCodePrefixes(refreshedCreateOptions.codePrefixes);
+        } catch (optionsError) {
+          console.error('Unable to refresh product code prefixes after product create:', optionsError);
+        }
         if (fromSuggestedStock) {
           try {
             await clearNotListedRemarks({
@@ -623,12 +661,48 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
 
             {detailTab === 'details' && <div className="grid grid-cols-1 gap-x-5 gap-y-3 lg:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Part No.">{fieldInput('part_no', 'Input Part Number')}</LegacyField>
-              <LegacyField label="Item Code">{fieldInput('item_code', 'Input Item Code')}</LegacyField>
+              <LegacyField label="Item Code">
+                {editingProduct ? fieldInput('item_code', 'Item Code') : (
+                  <div className="space-y-1">
+                    <select
+                      value={productCodePrefix}
+                      onChange={(event) => setProductCodePrefix(event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Select Item Code Prefix</option>
+                      {productCodePrefixes.map((prefix) => <option key={prefix.id} value={prefix.name}>{prefix.name}</option>)}
+                      <option value={ADD_PRODUCT_CODE_PREFIX}>Add New Code</option>
+                    </select>
+                    {productCodePrefix === ADD_PRODUCT_CODE_PREFIX && (
+                      <input
+                        type="text"
+                        value={newProductCodePrefix}
+                        onChange={(event) => setNewProductCodePrefix(event.target.value)}
+                        placeholder="Input New Code"
+                        className={inputClass}
+                      />
+                    )}
+                    {!productCodePrefix && <span className="block text-xs text-slate-500">A number is added automatically when the product is saved.</span>}
+                  </div>
+                )}
+              </LegacyField>
               <LegacyField label="Category">
-                <select value={formData.category} onChange={(event) => updateField('category', event.target.value)} className={inputClass}>
-                  <option value="">Select Category</option>
-                  {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
-                </select>
+                <div className="space-y-1">
+                  <select value={formData.category} onChange={(event) => updateField('category', event.target.value)} className={inputClass}>
+                    <option value="">Select Category</option>
+                    {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
+                    {!editingProduct && <option value={ADD_PRODUCT_CATEGORY}>Add New Category</option>}
+                  </select>
+                  {!editingProduct && formData.category === ADD_PRODUCT_CATEGORY && (
+                    <input
+                      type="text"
+                      value={newProductCategory}
+                      onChange={(event) => setNewProductCategory(event.target.value)}
+                      placeholder="Input New Category"
+                      className={inputClass}
+                    />
+                  )}
+                </div>
               </LegacyField>
               <LegacyField label="Original P/N No.">{fieldInput('original_pn_no', 'Input P/N No.')}</LegacyField>
               <LegacyField label="OEM No.">{fieldInput('oem_no', 'Input OEM No.')}</LegacyField>
@@ -641,6 +715,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               <LegacyField label="No. of Cylinder">{fieldInput('no_of_cylinder', 'Input No. of Cylinder')}</LegacyField>
               <LegacyField label="Barcode">{fieldInput('barcode', 'Input Barcode')}</LegacyField>
               <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
+              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
               <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
               <LegacyField label="Status">
                 <select value={formData.status} onChange={(event) => updateField('status', event.target.value)} className={inputClass}>
@@ -709,9 +784,23 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             {detailTab === 'pricing' && <div>
             <h2 className="mb-3 font-semibold">Price List</h2>
             <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
-              <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
-              <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
+              {!editingProduct && priceGroups.length > 0 ? priceGroups.map((group) => (
+                <LegacyField key={group.name} label={group.type === 'Regular' ? `Regular - ${group.name}` : group.name}>
+                  <input
+                    type="number"
+                    value={priceGroupAmounts[group.name] ?? 0}
+                    onChange={(event) => setPriceGroupAmounts((current) => ({ ...current, [group.name]: Number(event.target.value || 0) }))}
+                    placeholder="Input Amount"
+                    className={inputClass}
+                  />
+                </LegacyField>
+              )) : (
+                <>
+                  <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
+                  <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+                  <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
+                </>
+              )}
             </div>
             <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Current Stock">

@@ -123,9 +123,13 @@ const getLocalProductContext = () => {
 const compactObject = (payload: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== undefined));
 
-const withoutReplenishQuantity = (payload: Record<string, unknown>) => {
-  const { replenish_quantity: _replenishQuantity, ...productPayload } = payload;
-  return productPayload;
+const toProductWritePayload = (payload: Record<string, unknown>) => {
+  const { recordImage, recordImagePosition, ...legacyFields } = payload;
+  return compactObject({
+    ...legacyFields,
+    ...(recordImage !== undefined ? { record_image: recordImage } : {}),
+    ...(recordImagePosition !== undefined ? { record_image_position: recordImagePosition } : {}),
+  });
 };
 
 export type ProductListStatus = 'all' | 'active' | 'inactive';
@@ -168,6 +172,31 @@ export interface FetchProductsPageResult {
     };
   };
 }
+
+export interface ProductCodePrefix {
+  id: number;
+  name: string;
+}
+
+export interface ProductPriceGroup {
+  name: string;
+  type: string;
+}
+
+export const fetchProductCreateOptions = async (): Promise<{ codePrefixes: ProductCodePrefix[]; priceGroups: ProductPriceGroup[] }> => {
+  const { mainId } = getLocalProductContext();
+  const params = new URLSearchParams({ main_id: String(mainId) });
+  const response = await fetch(`${API_BASE_URL}/products/create-options?${params.toString()}`);
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  const payload = await response.json();
+  const data = payload?.data ?? {};
+  const codePrefixes = Array.isArray(data.code_prefixes) ? data.code_prefixes : [];
+  const priceGroups = Array.isArray(data.price_groups) ? data.price_groups : [];
+  return {
+    codePrefixes: codePrefixes.map((row: any) => ({ id: Number(row.id), name: String(row.name ?? '') })),
+    priceGroups: priceGroups.map((row: any) => ({ name: String(row.name ?? ''), type: String(row.type ?? 'Regular') })),
+  };
+};
 
 export const fetchProducts = async (
   status: ProductListStatus = 'all',
@@ -301,13 +330,19 @@ export const searchSalesInquiryProducts = async (
   return rows.map(normalizeApiProduct);
 };
 
-export const createProduct = async (product: Omit<Product, 'id'>): Promise<void> => {
+export const createProduct = async (product: Omit<Product, 'id'> & {
+  product_code_prefix?: string;
+  create_product_code_prefix?: boolean;
+  suggested_inquiry_item_id?: string;
+  suggested_part_no?: string;
+  price_group_amounts?: Record<string, number>;
+}): Promise<void> => {
   const { mainId, userId } = getLocalProductContext();
   const response = await fetch(`${API_BASE_URL}/products`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ...withoutReplenishQuantity(compactObject(product as unknown as Record<string, unknown>)),
+      ...toProductWritePayload(product as unknown as Record<string, unknown>),
       main_id: mainId,
       user_id: userId,
     }),
@@ -321,7 +356,7 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ...withoutReplenishQuantity(compactObject(updates as Record<string, unknown>)),
+      ...toProductWritePayload(updates as Record<string, unknown>),
       main_id: mainId,
       user_id: userId,
     }),

@@ -422,7 +422,7 @@ describe('DailyCallMasterListView', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Unverified Prospects (1)' }));
     const verifyButton = await screen.findByRole('button', { name: 'Verify prospect for Pending Prospect Shop' });
-    expect(verifyButton).toHaveTextContent('Verify');
+    expect(verifyButton).toBeInTheDocument();
     await user.click(verifyButton);
 
     expect(updateContact).toHaveBeenCalledWith('pending-verified-1', { verification: 'Verified' }, 'master-1');
@@ -1019,7 +1019,7 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView currentUser={masterUser} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' }));
+    await user.click(await screen.findByRole('button', { name: 'Blacklist or reject Priority Buyer Shop' }));
     const dialog = await screen.findByRole('dialog', { name: 'Move to Blacklisted/Rejected List' });
 
     expect(confirmSpy).not.toHaveBeenCalled();
@@ -1529,9 +1529,10 @@ describe('DailyCallMasterListView', () => {
 
     render(<DailyCallMasterListView currentUser={clientUser} />);
 
-    await user.click(await screen.findByRole('button', { name: 'Mark Sunny Dalapo as Do Not Contact' }));
+    await user.click(await screen.findByRole('button', { name: 'Blacklist or reject Sunny Dalapo' }));
     const dialog = await screen.findByRole('dialog', { name: 'Move to Blacklisted/Rejected List' });
-    await user.type(within(dialog).getByLabelText('Reason for Do Not Contact'), 'Client requested no further calls');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Reason for Do Not Contact' }), 'Other');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Other Do Not Contact reason' }), 'Client requested no further calls');
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Contact' }));
 
     await waitFor(() => expect(requestCustomerUpdate).toHaveBeenCalledWith('sunny-1', {
@@ -1565,7 +1566,7 @@ describe('DailyCallMasterListView', () => {
     render(<DailyCallMasterListView />);
 
     expect(await screen.findByRole('button', { name: /Blacklisted\/Rejected \(1\)/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Mark Blocked Shop as Do Not Contact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Blacklist or reject Blocked Shop' })).not.toBeInTheDocument();
   });
 
   it('does not show master do-not-contact controls when the master view is rendered without a master user', async () => {
@@ -1595,7 +1596,7 @@ describe('DailyCallMasterListView', () => {
     expect(await screen.findByRole('button', { name: 'Call Priority Buyer Shop' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Bulk Do Not Call' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark Priority Buyer Shop Do Not Call' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Mark Priority Buyer Shop as Do Not Contact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Blacklist or reject Priority Buyer Shop' })).not.toBeInTheDocument();
   });
 
   it('requires the Master User claim for Do Not Call controls', async () => {

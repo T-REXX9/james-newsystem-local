@@ -6,6 +6,7 @@ import {
   fetchProducts,
   updateProduct,
 } from '../localDataService';
+import { fetchProductCreateOptions } from '../productLocalApiService';
 import type { Product } from '../../types';
 
 const API_BASE_URL = (import.meta as any)?.env?.VITE_API_BASE_URL || '/api/v1';
@@ -40,8 +41,10 @@ describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Product Database
     async () => {
       const seed = Date.now();
       const uniquePartNo = `CODEx-IT-PN-${seed}`;
-      const uniqueItemCode = `CODEx-IT-CODE-${seed}`;
       let productId: string | null = null;
+      const createOptions = await fetchProductCreateOptions();
+      const selectedPrefix = createOptions.codePrefixes[0]?.name;
+      expect(selectedPrefix).toBeTruthy();
 
       const list = await fetchProducts();
       expect(Array.isArray(list)).toBe(true);
@@ -83,12 +86,18 @@ describe.skipIf(process.env.RUN_LOCAL_API_INTEGRATION !== '1')('Product Database
       };
 
       try {
-        await createProduct(baseProduct);
+        await createProduct({
+          ...baseProduct,
+          product_code_prefix: selectedPrefix,
+          create_product_code_prefix: false,
+        });
 
-        const created = await findProductBySearch(uniqueItemCode);
+        const created = await findProductBySearch(uniquePartNo);
         expect(created).toBeTruthy();
         productId = String(created.id);
         expect(created.part_no).toContain(uniquePartNo);
+        expect(String(created.item_code).startsWith(selectedPrefix!)).toBe(true);
+        expect(String(created.item_code).slice(selectedPrefix!.length)).toMatch(/^\d+$/);
 
         await updateProduct(productId, {
           description: 'Codex integration test product updated',

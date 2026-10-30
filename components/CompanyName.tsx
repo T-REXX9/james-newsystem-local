@@ -53,10 +53,14 @@ const CompanyName: React.FC<CompanyNameProps> = ({
     return '';
   })();
   const displayName = normalizedName || normalizedPastName || fallback;
+  const hasSharedMarker = Boolean(showStar && entity?.id);
+  const resolvedClassName = hasSharedMarker
+    ? `${(className || '').split(/\s+/).filter((token) => token && token !== 'truncate').join(' ')} inline-flex min-w-0 max-w-full items-center gap-1.5`.trim()
+    : className;
 
   return (
-    <span className={className}>
-      {displayName}
+    <span className={resolvedClassName}>
+      <span className={hasSharedMarker ? 'min-w-0 truncate' : undefined}>{displayName}</span>
       {showStar && entity?.id ? <CustomerStarIndicator customerId={entity.id} isStarred={entity.isStarred} /> : null}
       {normalizedPastName && (
         <span className={formerNameClassName || 'text-xs text-slate-500 font-medium ml-1'}>
