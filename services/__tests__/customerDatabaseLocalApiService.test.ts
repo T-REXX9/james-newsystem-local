@@ -1,6 +1,7 @@
 import { CustomerStatus } from '../../types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from '../dailyCallMonitoringService';
+import { fetchStarredCustomerIds } from '../customerStarService';
 import { bulkUpdateContacts, deleteCustomer, fetchContactById, fetchContactForDailyCall, fetchContacts, mapApiCustomerToContact, mapContactPayloadToApi, mapContactUpdatesToApi, setCustomerStarred, updateContact } from '../customerDatabaseLocalApiService';
 
 const reloadStanding = (patch: Record<string, unknown>) =>
@@ -14,6 +15,8 @@ const reloadStanding = (patch: Record<string, unknown>) =>
   }).status;
 
 describe('customer database price and discount codes', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
   it('shows the current active sales agent name and never exposes an inactive agent ID as a name', () => {
     const assigned = mapApiCustomerToContact({
       session_id: 'cust-current-agent',
@@ -49,7 +52,17 @@ describe('customer database price and discount codes', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][0])).toContain('/customer-database/customer%2F1/star');
-    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({ is_starred: true });
+    expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body))).toEqual({ main_id: 1, is_starred: true });
+  });
+
+  it('always reads the shared star list without using a cached response', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { items: ['starred-customer'] } }),
+    } as Response);
+
+    await expect(fetchStarredCustomerIds()).resolves.toEqual(['starred-customer']);
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
   });
 
   it('maps the legacy company name for display and local search', () => {

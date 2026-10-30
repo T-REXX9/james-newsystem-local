@@ -521,7 +521,9 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
     doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
     doNotContactReason: cleanNullableText(row?.doNotContactReason ?? row?.do_not_contact_reason),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),
-    isStarred: row?.is_starred === true || row?.is_starred === 1 || row?.is_starred === '1',
+    isStarred: (row?.isStarred ?? row?.is_starred) === true
+      || (row?.isStarred ?? row?.is_starred) === 1
+      || (row?.isStarred ?? row?.is_starred) === '1',
     pastName: cleanNullableText(row?.pastName ?? row?.past_name ?? row?.oldName ?? row?.old_name),
     province: cleanNullableText(row?.province, '—'),
     city: cleanNullableText(row?.city, '—'),

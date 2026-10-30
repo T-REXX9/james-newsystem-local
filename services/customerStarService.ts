@@ -13,7 +13,10 @@ export const fetchStarredCustomerIds = async (): Promise<string[]> => {
   const query = new URLSearchParams({ main_id: String(mainId) });
   const headers = new Headers();
   if (session?.token) headers.set('Authorization', `Bearer ${session.token}`);
-  const response = await fetch(`${API_BASE_URL}/customer-stars?${query.toString()}`, { headers });
+  const response = await fetch(`${API_BASE_URL}/customer-stars?${query.toString()}`, {
+    headers,
+    cache: 'no-store',
+  });
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
   const payload = await response.json();
   const items = payload?.data?.items;

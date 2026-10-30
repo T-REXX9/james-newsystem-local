@@ -1,29 +1,48 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { fetchStarredCustomerIds } from '../services/customerStarService';
 import { CUSTOMER_STAR_UPDATED_EVENT } from '../utils/customerStarEvents';
+import type { CustomerStarUpdatedDetail } from '../utils/customerStarEvents';
 
 const CustomerStarContext = createContext<Set<string> | null>(null);
 
 export const CustomerStarProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [starredIds, setStarredIds] = useState<Set<string> | null>(null);
+  const latestRefreshId = useRef(0);
 
   useEffect(() => {
     let mounted = true;
     const refresh = () => {
+      const refreshId = ++latestRefreshId.current;
       void fetchStarredCustomerIds()
         .then((ids) => {
-          if (mounted) setStarredIds(new Set(ids.map((id) => String(id).trim()).filter(Boolean)));
+          if (mounted && refreshId === latestRefreshId.current) {
+            setStarredIds(new Set(ids.map((id) => String(id).trim()).filter(Boolean)));
+          }
         })
         .catch(() => {
           // Keep rendering any page-provided star state when lookup is unavailable.
         });
     };
     refresh();
-    window.addEventListener(CUSTOMER_STAR_UPDATED_EVENT, refresh);
+    const handleStarUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<CustomerStarUpdatedDetail>).detail;
+      if (detail?.customerId) {
+        const customerId = String(detail.customerId).trim();
+        setStarredIds((current) => {
+          const next = new Set(current || []);
+          if (detail.isStarred) next.add(customerId);
+          else next.delete(customerId);
+          return next;
+        });
+      }
+      refresh();
+    };
+    window.addEventListener(CUSTOMER_STAR_UPDATED_EVENT, handleStarUpdate);
     return () => {
       mounted = false;
-      window.removeEventListener(CUSTOMER_STAR_UPDATED_EVENT, refresh);
+      latestRefreshId.current += 1;
+      window.removeEventListener(CUSTOMER_STAR_UPDATED_EVENT, handleStarUpdate);
     };
   }, []);
 

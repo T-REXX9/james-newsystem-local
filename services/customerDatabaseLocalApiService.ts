@@ -5,6 +5,7 @@ import { Contact, ContactPerson, ContactTransaction, CustomerStatus, CustomerVat
 import { fetchDailyCallMasterList, invalidateDailyCallMasterListCache } from './dailyCallMonitoringService';
 import { getLocalAuthSession } from './localAuthService';
 import { CUSTOMER_STAR_UPDATED_EVENT } from '../utils/customerStarEvents';
+import type { CustomerStarUpdatedDetail } from '../utils/customerStarEvents';
 import { fetchAssignableStaff } from './staffLocalApiService';
 import { customerLedgerService, ledgerRowsToContactTransactions } from './customerLedgerService';
 
@@ -392,13 +393,21 @@ export const mapApiCustomerToContact = (row: ApiCustomerRow): LocalContact => {
 };
 
 export const setCustomerStarred = async (sessionId: string, isStarred: boolean): Promise<void> => {
+  const session = getLocalAuthSession();
+  const sessionMainId = Number(
+    session?.context?.main_userid || session?.context?.user?.main_userid || session?.userProfile?.main_userid || 0
+  );
+  const mainId = Number.isFinite(sessionMainId) && sessionMainId > 0 ? sessionMainId : API_MAIN_ID;
   await requestJson(`${API_BASE_URL}/customer-database/${encodeURIComponent(sessionId)}/star`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ is_starred: isStarred }),
+    body: JSON.stringify({ main_id: mainId, is_starred: isStarred }),
   });
   invalidateDailyCallMasterListCache();
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CUSTOMER_STAR_UPDATED_EVENT));
+  if (typeof window !== 'undefined') {
+    const detail: CustomerStarUpdatedDetail = { customerId: String(sessionId).trim(), isStarred };
+    window.dispatchEvent(new CustomEvent(CUSTOMER_STAR_UPDATED_EVENT, { detail }));
+  }
 };
 
 export const mapContactPayloadToApi = (contact: ContactPayloadWithSalesPersonId) => {

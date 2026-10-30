@@ -108,6 +108,7 @@ describe('dailyCallMonitoringService', () => {
     const mockRows = [{
       id: '1',
       shopName: 'Priority Shop',
+      isStarred: true,
       purchaseCount: 2,
       days_since_last_purchase: 20,
       purchase_age_group: 'two_weeks_to_one_month',
@@ -122,6 +123,7 @@ describe('dailyCallMonitoringService', () => {
     expect(result.items[0]).toMatchObject({
       id: '1',
       shopName: 'Priority Shop',
+      isStarred: true,
       purchaseCount: 2,
       daysSinceLastPurchase: 20,
       purchaseAgeGroup: 'two_weeks_to_one_month',
