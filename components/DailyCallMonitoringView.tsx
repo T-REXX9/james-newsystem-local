@@ -107,6 +107,7 @@ import {
   resolveDailyCallPurchaseHighlightColor,
 } from '../utils/dailyCallPurchaseHighlight';
 import { VERIFIED_PROSPECT_POTENTIAL, averageMonthlyPaidSales } from '../utils/dailyCallPotentialSales';
+import { resolveVipDiscountLevel } from '../utils/vipStanding';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { DEFAULT_CUSTOMER_VAT_TYPE } from '../constants/customerVat';
 import { DAILY_CALL_PAGE_LABEL, hasActionPermission, isMasterUserAccount, isMasterUserType, isSalesStaffAccount } from '../constants';
@@ -416,6 +417,8 @@ type DailyCallViewSnapshot = {
   summaryCollapsed?: boolean;
 };
 
+const DAILY_CALL_VIP_SUMMARY_HISTORY_KEY = '__dailyCallVipCustomerSummary';
+
 const dailyCallSnapshotKey = (userId?: string, selectedDate?: string) =>
   `daily-call-view:${userId || 'unknown'}:${selectedDate || 'today'}`;
 
@@ -671,6 +674,12 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [bulkBlacklistCustomReason, setBulkBlacklistCustomReason] = useState('');
   const [savingBulkBlacklist, setSavingBulkBlacklist] = useState(false);
   const [activeWorkspacePanel, setActiveWorkspacePanel] = useState<'quota' | 'calls' | 'summaries' | 'filters' | 'actions' | null>(null);
+  const [selectedVipSummary, setSelectedVipSummary] = useState<{ label: string; tier: 'silver' | 'gold'; rows: MasterRow[] } | null>(null);
+  const selectedVipSummaryRef = useRef(selectedVipSummary);
+  const vipSummaryTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const vipSummaryCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const vipSummaryDialogRef = useRef<HTMLElement | null>(null);
+  const ownsVipSummaryHistoryEntry = useRef(false);
   const [callLogs, setCallLogs] = useState<CallLogEntry[]>([]);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -723,6 +732,92 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
   const [activeTab, setActiveTab] = useState<'master' | 'today' | 'activity'>(() => restoredViewSnapshot?.activeTab || 'master');
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(() => restoredViewSnapshot?.detailsPanelOpen || false);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(() => restoredViewSnapshot?.selectedClientId || null);
+  const closeVipSummary = useCallback(() => {
+    const historyState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (ownsVipSummaryHistoryEntry.current && historyState[DAILY_CALL_VIP_SUMMARY_HISTORY_KEY] === true) {
+      window.history.back();
+      return;
+    }
+    ownsVipSummaryHistoryEntry.current = false;
+    setSelectedVipSummary(null);
+  }, []);
+  const openVipSummary = useCallback((summary: NonNullable<typeof selectedVipSummary>, trigger: HTMLButtonElement) => {
+    vipSummaryTriggerRef.current = trigger;
+    selectedVipSummaryRef.current = summary;
+    setSelectedVipSummary(summary);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedVipSummary) return;
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (currentState[DAILY_CALL_VIP_SUMMARY_HISTORY_KEY] !== true) {
+      window.history.pushState({ ...currentState, [DAILY_CALL_VIP_SUMMARY_HISTORY_KEY]: true }, '', window.location.href);
+    }
+    ownsVipSummaryHistoryEntry.current = true;
+  }, [selectedVipSummary]);
+
+  useEffect(() => {
+    const syncVipSummaryWithHistory = (event: PopStateEvent) => {
+      const historyState = event.state && typeof event.state === 'object'
+        ? event.state as Record<string, unknown>
+        : {};
+      const isSummaryOpen = historyState[DAILY_CALL_VIP_SUMMARY_HISTORY_KEY] === true;
+      const wasSummaryOpen = ownsVipSummaryHistoryEntry.current;
+      ownsVipSummaryHistoryEntry.current = isSummaryOpen;
+      if (isSummaryOpen) {
+        if (selectedVipSummaryRef.current) setSelectedVipSummary(selectedVipSummaryRef.current);
+      } else if (wasSummaryOpen) {
+        setSelectedVipSummary(null);
+      }
+    };
+    window.addEventListener('popstate', syncVipSummaryWithHistory);
+    return () => window.removeEventListener('popstate', syncVipSummaryWithHistory);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedVipSummary) return;
+    const trigger = vipSummaryTriggerRef.current;
+    const dialog = vipSummaryDialogRef.current;
+    const closeButton = vipSummaryCloseButtonRef.current;
+    closeButton?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeVipSummary();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusableElements = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (!focusableElements.length) {
+        event.preventDefault();
+        closeButton?.focus();
+        return;
+      }
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [closeVipSummary, selectedVipSummary]);
   const [pendingInitialActivityRef, setPendingInitialActivityRef] = useState<string | undefined>(undefined);
   const [showContactDetails, setShowContactDetails] = useState(() => restoredViewSnapshot?.showContactDetails || false);
   const [fullDetailsContact, setFullDetailsContact] = useState<Contact | null>(null);
@@ -1616,6 +1711,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         : id === 'unverified'
           ? 0
           : averageMonthlySales;
+      const vipSilverRows: MasterRow[] = [];
+      const vipGoldRows: MasterRow[] = [];
+      for (const row of rows) {
+        const tier = resolveVipDiscountLevel(row.currentMonthSales);
+        if (tier === 'silver') vipSilverRows.push(row);
+        if (tier === 'gold') vipGoldRows.push(row);
+      }
       return {
         id,
         label,
@@ -1626,6 +1728,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         modalMetric,
         modalMetricLabel,
         potentialSales,
+        vipSilverRows,
+        vipGoldRows,
         metricLabel: 'Current Month Sales',
       };
     };
@@ -2279,6 +2383,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           {formatCurrency(summary.rows.reduce((sum, row) => sum + row.currentMonthSales, 0))}
                         </dd>
                       </div>
+                      <div className="mt-1 border-t border-slate-200/80 pt-1 dark:border-slate-700">
+                        <button type="button" onClick={(event) => openVipSummary({ label: summary.label, tier: 'silver', rows: summary.vipSilverRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-amber-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-300" aria-label={`Show ${summary.vipSilverRows.length} VIP Silver customers in ${summary.label}`}>
+                          VIP Silver: {summary.vipSilverRows.length}
+                        </button>
+                        <button type="button" onClick={(event) => openVipSummary({ label: summary.label, tier: 'gold', rows: summary.vipGoldRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-yellow-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 dark:text-yellow-300" aria-label={`Show ${summary.vipGoldRows.length} VIP Gold customers in ${summary.label}`}>
+                          VIP Gold: {summary.vipGoldRows.length}
+                        </button>
+                      </div>
                       <div className="mt-1">
                         <dt className="text-slate-600 dark:text-slate-300">Monthly Potential Sales</dt>
                         <dd className="font-extrabold tabular-nums">{formatCompactCurrency(summary.potentialSales)}</dd>
@@ -2295,6 +2407,14 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                           : formatCompactCurrency(summary.primaryMetric)}
                       </dd>
                     </div>
+                    <div className="mt-1 border-t border-slate-200/80 pt-1 dark:border-slate-700">
+                      <button type="button" onClick={(event) => openVipSummary({ label: summary.label, tier: 'silver', rows: summary.vipSilverRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-amber-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:text-amber-300" aria-label={`Show ${summary.vipSilverRows.length} VIP Silver customers in ${summary.label}`}>
+                        VIP Silver: {summary.vipSilverRows.length}
+                      </button>
+                      <button type="button" onClick={(event) => openVipSummary({ label: summary.label, tier: 'gold', rows: summary.vipGoldRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-yellow-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500 dark:text-yellow-300" aria-label={`Show ${summary.vipGoldRows.length} VIP Gold customers in ${summary.label}`}>
+                        VIP Gold: {summary.vipGoldRows.length}
+                      </button>
+                    </div>
                     <div className="mt-1">
                       <dt className="text-slate-600 dark:text-slate-300">Potential Sales</dt>
                       <dd className="font-extrabold tabular-nums">{formatCompactCurrency(summary.potentialSales)}</dd>
@@ -2306,6 +2426,32 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           );
         })}
       </section>}
+
+      {selectedVipSummary && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeVipSummary(); }}>
+          <section ref={vipSummaryDialogRef} role="dialog" aria-modal="true" aria-labelledby="agent-vip-summary-title" tabIndex={-1} className="flex max-h-[min(80vh,42rem)] w-full max-w-xl flex-col rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{selectedVipSummary.label}</p>
+                <h2 id="agent-vip-summary-title" className="text-base font-bold text-slate-900 dark:text-white">{selectedVipSummary.tier === 'silver' ? 'VIP Silver' : 'VIP Gold'} customers</h2>
+              </div>
+              <button ref={vipSummaryCloseButtonRef} type="button" onClick={closeVipSummary} className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800" aria-label="Close VIP customer list"><X className="h-5 w-5" /></button>
+            </header>
+            {selectedVipSummary.rows.length > 0 ? (
+              <ul className="min-h-0 divide-y divide-slate-100 overflow-y-auto p-4 dark:divide-slate-800">
+                {selectedVipSummary.rows.map((row) => (
+                  <li key={row.contact.id} className="flex min-w-0 flex-col gap-1 py-3 first:pt-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                    <span className="min-w-0 break-words text-sm font-semibold text-slate-900 dark:text-white">{row.contact.company}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-slate-600 dark:text-slate-300">Current month ledger sales: {formatCurrency(row.currentMonthSales)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-8 text-center text-sm text-slate-500">No {selectedVipSummary.tier === 'silver' ? 'VIP Silver' : 'VIP Gold'} customers in this category.</p>
+            )}
+          </section>
+        </div>
+      )}
 
       {activeWorkspacePanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveWorkspacePanel(null); }} onKeyDown={(event) => { if (event.key === 'Escape') setActiveWorkspacePanel(null); }}>

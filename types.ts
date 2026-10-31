@@ -1374,6 +1374,7 @@ export interface SalesOrderItem {
   item_code: string;
   location: string;
   description: string;
+  brand?: string;
   unit_price: number;
   amount: number;
   remark?: string;
@@ -1458,6 +1459,7 @@ export interface OrderSlipItem {
   item_code: string;
   location: string;
   description: string;
+  brand?: string;
   unit_price: number;
   amount: number;
   remark?: string;
@@ -1539,6 +1541,7 @@ export interface InvoiceItem {
   part_no: string;
   item_code: string;
   description: string;
+  brand?: string;
   unit_price: number;
   amount: number;
   location?: string;

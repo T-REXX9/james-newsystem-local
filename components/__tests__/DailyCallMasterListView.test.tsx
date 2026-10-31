@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
 import { fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
@@ -85,6 +85,7 @@ describe('DailyCallMasterListView', () => {
       : {};
     delete historyState.__jamesDailyCallMasterList;
     delete historyState.__jamesDailyCallBatchDoNotContact;
+    delete historyState.__jamesDailyCallVipSummary;
     window.history.replaceState(historyState, '', window.location.href);
     vi.clearAllMocks();
     vi.mocked(createCustomerLogForDailyCall).mockResolvedValue({
@@ -1945,5 +1946,49 @@ describe('DailyCallMasterListView', () => {
     await user.click(customerCheckbox);
     expect(screen.getByRole('button', { name: 'Blacklist / Reject selected' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Do Not Call' })).toBeInTheDocument();
+  });
+
+  it('shows VIP customers in the summary modal and contains keyboard focus', async () => {
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-10-31', count: 2 },
+      items: [
+        {
+          id: 'vip-silver', shopName: 'Silver Customer', profileType: 'Customer', priorityTransactionCount: 1,
+          purchaseCount: 1, currentMonthSales: 15000, totalSales: 15000, averageMonthlySales: 15000,
+          averageMonthlySalesMonthCount: 1, recentThreeMonthSales: 15000, previousThreeMonthSales: 0,
+          salesTrendPercent: 0, daysSinceLastPurchase: 1, monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent',
+        },
+        {
+          id: 'vip-gold', shopName: 'Gold Customer', profileType: 'Customer', priorityTransactionCount: 1,
+          purchaseCount: 1, currentMonthSales: 35000, totalSales: 35000, averageMonthlySales: 35000,
+          averageMonthlySalesMonthCount: 1, recentThreeMonthSales: 35000, previousThreeMonthSales: 0,
+          salesTrendPercent: 0, daysSinceLastPurchase: 1, monthsSinceLastPurchase: 0, purchaseAgeGroup: 'recent',
+        },
+      ] as any,
+    });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    const user = userEvent.setup();
+    const trigger = await screen.findByRole('button', { name: 'Show 1 VIP Silver customers in Priority List' });
+    await user.click(trigger);
+
+    const dialog = screen.getByRole('dialog', { name: 'VIP Silver customers' });
+    expect(within(dialog).getByText('Silver Customer')).toBeInTheDocument();
+    expect(within(dialog).queryByText('Gold Customer')).not.toBeInTheDocument();
+
+    const closeButton = within(dialog).getByRole('button', { name: 'Close VIP customer list' });
+    expect(document.activeElement).toBe(closeButton);
+    await user.tab();
+    expect(document.activeElement).toBe(closeButton);
+
+    expect(window.history.state.__jamesDailyCallVipSummary).toBe(true);
+    await act(async () => { window.history.back(); });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'VIP Silver customers' })).not.toBeInTheDocument());
+    await act(async () => { window.history.forward(); });
+    expect(await screen.findByRole('dialog', { name: 'VIP Silver customers' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'VIP Silver customers' })).not.toBeInTheDocument());
+    expect(document.activeElement).toBe(trigger);
   });
 });

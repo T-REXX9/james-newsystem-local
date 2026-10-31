@@ -253,6 +253,56 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(blockedCard.getAllByText(/₱0/)).toHaveLength(2);
   });
 
+  it('shows ledger-based VIP counts for sales agents and opens a modal with only the matching customers', async () => {
+    const purchaseDate = new Date().toISOString().slice(0, 10);
+    const customers = [
+      { id: 'silver-customer', shopName: 'Silver Customer Shop', currentMonthSales: 15000 },
+      { id: 'gold-customer', shopName: 'Gold Customer Shop', currentMonthSales: 35000 },
+    ];
+    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+      ...baseSnapshot,
+      contacts: customers.map((customer) => ({
+        ...baseSnapshot.contacts[0],
+        id: customer.id,
+        shopName: customer.shopName,
+        status: 'active',
+        customerStatus: 1,
+      })),
+      masterList: customers.map((customer) => ({
+        ...customer,
+        listCategory: 'priority',
+        customerStatus: 1,
+        debtType: 'Good',
+        priorityTransactionCount: 1,
+        purchaseCount: 1,
+        lastPurchaseDateRaw: purchaseDate,
+      })),
+    });
+
+    const user = userEvent.setup();
+    render(<DailyCallMonitoringView currentUser={currentUser} />);
+
+    const priorityCard = await screen.findByTestId('daily-call-summary-priority');
+    const silverButton = within(priorityCard).getByRole('button', { name: 'Show 1 VIP Silver customers in Priority List' });
+    expect(within(priorityCard).getByRole('button', { name: 'Show 1 VIP Gold customers in Priority List' })).toHaveTextContent('VIP Gold: 1');
+    expect(silverButton).toHaveTextContent('VIP Silver: 1');
+
+    await user.click(silverButton);
+    const silverDialog = await screen.findByRole('dialog', { name: 'VIP Silver customers' });
+    expect(within(silverDialog).getByText('Silver Customer Shop')).toBeInTheDocument();
+    expect(within(silverDialog).queryByText('Gold Customer Shop')).not.toBeInTheDocument();
+    expect(within(silverDialog).getByText(/Current month ledger sales: ₱15,000/)).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'VIP Silver customers' })).not.toBeInTheDocument());
+    expect(silverButton).toHaveFocus();
+
+    act(() => window.history.forward());
+    expect(await screen.findByRole('dialog', { name: 'VIP Silver customers' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'VIP Silver customers' })).not.toBeInTheDocument());
+  });
+
   it('shows Recovery current-month sales as the primary metric while retaining monthly potential', async () => {
     fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
       ...baseSnapshot,

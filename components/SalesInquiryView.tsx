@@ -1807,13 +1807,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             <div className="mt-[24px] overflow-x-auto">
               <table className="w-full min-w-[980px] border-collapse text-[12px]">
                 <thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold">
-                  <th className="w-[70px] px-2 pb-2">Qty.</th><th className="w-[140px] px-2 pb-2">Part No.</th><th className="w-[140px] px-2 pb-2">Item Code</th><th className="w-[120px] px-2 pb-2">Location</th><th className="px-2 pb-2">Description</th><th className="w-[105px] px-2 pb-2">Unit price</th><th className="w-[105px] px-2 pb-2">Amount</th><th className="w-[120px] px-2 pb-2">Remark</th><th className="w-[175px] px-2 pb-2">Actions</th>
+                  <th className="w-[70px] px-2 pb-2">Qty.</th><th className="w-[140px] px-2 pb-2">Part No.</th><th className="w-[140px] px-2 pb-2">Item Code</th><th className="w-[120px] px-2 pb-2">Location</th><th className="w-[120px] px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="w-[105px] px-2 pb-2">Unit price</th><th className="w-[105px] px-2 pb-2">Amount</th><th className="w-[120px] px-2 pb-2">Remark</th><th className="w-[175px] px-2 pb-2">Actions</th>
                 </tr></thead>
                 <tbody>{items.map((item) => <tr key={item.tempId} className="border-b border-[#e1e1e1]">
                   <td className="px-1 py-2"><input type="number" min="1" disabled={isReadOnly} value={item.qty} onChange={(event) => updateItemRow(item.tempId, 'qty', event.target.value === '' ? '' : Number(event.target.value))} className="w-full border border-[#ccc] px-1 py-1 text-center" /></td>
                   <td className="px-2 py-2 text-center">{isManualItem(item) ? <input value={item.part_no || ''} onChange={(event) => updateItemRow(item.tempId, 'part_no', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.part_no || ''}</td>
                   <td className="px-2 py-2 text-center">{isManualItem(item) ? <input value={item.item_code || ''} onChange={(event) => updateItemRow(item.tempId, 'item_code', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.item_code || ''}</td>
                   <td className="px-2 py-2 text-center">{item.location || ''}</td>
+                  <td className="px-2 py-2 text-center">{item.brand || ''}</td>
                   <td className="px-2 py-2">{!item.item_id && !isManualItem(item) ? <button type="button" onClick={() => handleOpenProductModal(item.tempId!)} className="text-[#337ab7] underline">Click to search product</button> : isManualItem(item) ? <input value={item.description || ''} onChange={(event) => updateItemRow(item.tempId, 'description', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.description || ''}</td>
                   <td className="px-2 py-2 text-right"><input type="number" readOnly={!canEditItemUnitPrice(item)} value={item.unit_price} onChange={(event) => updateItemRow(item.tempId, 'unit_price', Number(event.target.value))} className="w-full border border-[#ccc] bg-white px-1 py-1 text-right read-only:bg-[#f5f5f5]" aria-label={`Unit price for ${item.part_no || item.item_code || 'item'}`} /></td>
                   <td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
@@ -1825,7 +1826,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                 </tr>)}</tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={6} className="px-2 py-3 text-right font-bold">Grand Total:</td>
+                    <td colSpan={7} className="px-2 py-3 text-right font-bold">Grand Total:</td>
                     <td className="px-2 py-3">
                       <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{grandTotal.toFixed(2)}</span>
                     </td>
@@ -1834,7 +1835,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <VipDocumentTotals
                     discount={vipDiscount}
                     formatMoney={(value) => value.toFixed(2)}
-                    grandTotalColSpan={6}
+                    grandTotalColSpan={9}
                   />
                 </tfoot>
               </table>

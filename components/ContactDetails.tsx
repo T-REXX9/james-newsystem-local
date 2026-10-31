@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { updateContact } from '../services/customerDatabaseLocalApiService';
+import { customerLedgerService } from '../services/customerLedgerService';
 import { requestCustomerUpdate } from '../services/customerWorkflowLocalApiService';
 import CustomerRequestsTab from './CustomerRequestsTab';
 import PersonalCommentsTab from './PersonalCommentsTab';
@@ -25,6 +26,7 @@ import { hasActionPermission, isMasterUserAccount } from '../constants';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
 import { normalizePriceGroup } from '../constants/pricingGroups';
 import RecordImageLightbox from './RecordImageLightbox';
+import { formatCurrency } from '../utils/formatUtils';
 
 interface ContactDetailsProps {
   contact: Contact;
@@ -69,6 +71,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const imagePullStartYRef = useRef<number | null>(null);
   const [newComment, setNewComment] = useState('');
   const [comments, setComments] = useState<Comment[]>(contact.comments || []);
+  const [salesSummary, setSalesSummary] = useState<{
+    contactId: string;
+    lastMonth: number;
+    currentMonth: number;
+    vipLevel: 'regular' | 'silver' | 'gold';
+    nextVipThreshold: number | null;
+  } | null>(null);
+  const [salesSummaryFailedContactId, setSalesSummaryFailedContactId] = useState<string | null>(null);
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
@@ -100,6 +110,43 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const isOwner = isMasterUserAccount(currentUser);
   const canAdd = hasActionPermission(currentUser, 'can_add', 'Customer Data');
   const canEdit = hasActionPermission(currentUser, 'can_edit', permissionPage);
+
+  useEffect(() => {
+    if (!showAgentSalesReportInOverview) return;
+    let isCurrent = true;
+    void customerLedgerService.getLedger(contact.id, { reportType: 'summary', dateType: 'all' }).then((ledger) => {
+      if (!isCurrent) return;
+      const lastMonth = Number(ledger.metrics.last_month_sales || 0);
+      const vipLevel = ['regular', 'silver', 'gold'].includes(String(ledger.metrics.vip_status).toLowerCase())
+        ? String(ledger.metrics.vip_status).toLowerCase() as 'regular' | 'silver' | 'gold'
+        : lastMonth >= ledger.metrics.vip_unlimited_discount_threshold
+          ? 'gold'
+          : lastMonth >= ledger.metrics.vip_one_time_discount_threshold ? 'silver' : 'regular';
+      setSalesSummary({
+        contactId: contact.id,
+        lastMonth,
+        currentMonth: Number(ledger.metrics.ledger_monthly_sales ?? ledger.metrics.monthly_sales ?? 0),
+        vipLevel,
+        nextVipThreshold: vipLevel === 'gold'
+          ? null
+          : vipLevel === 'silver'
+            ? ledger.metrics.vip_unlimited_discount_threshold
+            : ledger.metrics.vip_one_time_discount_threshold,
+      });
+      setSalesSummaryFailedContactId(null);
+    }).catch((error: unknown) => {
+      if (isCurrent) setSalesSummaryFailedContactId(contact.id);
+      console.error('Unable to load customer header sales summary:', error);
+    });
+    return () => { isCurrent = false; };
+  }, [contact.id, showAgentSalesReportInOverview]);
+
+  const currentContactSalesSummary = salesSummary?.contactId === contact.id ? salesSummary : null;
+  const currentContactSalesSummaryFailed = salesSummaryFailedContactId === contact.id;
+  const vipTierLabel = currentContactSalesSummary?.vipLevel === 'gold' ? 'VIP Gold' : currentContactSalesSummary?.vipLevel === 'silver' ? 'VIP Silver' : 'Regular';
+  const nextVipAmount = currentContactSalesSummary?.nextVipThreshold === null || !currentContactSalesSummary
+    ? null
+    : Math.max(0, currentContactSalesSummary.nextVipThreshold - currentContactSalesSummary.lastMonth);
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
@@ -452,6 +499,31 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                   </div>
               </div>
           </div>
+          {showAgentSalesReportInOverview && (
+            <div aria-label="Customer sales summary" className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <section className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                <h2 className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Last Month Purchases</h2>
+                <p className="mt-1 break-words text-base font-bold tabular-nums text-slate-900 dark:text-white">
+                  {currentContactSalesSummary ? formatCurrency(currentContactSalesSummary.lastMonth) : currentContactSalesSummaryFailed ? 'Unavailable' : 'Loading…'}
+                </p>
+              </section>
+              <section className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                <h2 className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">VIP Membership</h2>
+                <p className="mt-1 break-words text-base font-bold text-slate-900 dark:text-white">{currentContactSalesSummary ? vipTierLabel : currentContactSalesSummaryFailed ? 'Unavailable' : 'Loading…'}</p>
+                <p className="mt-0.5 break-words text-xs text-slate-600 dark:text-slate-300">
+                  {currentContactSalesSummary
+                    ? nextVipAmount === null ? 'Top tier reached' : `${formatCurrency(nextVipAmount)} to ${currentContactSalesSummary.vipLevel === 'silver' ? 'VIP Gold' : 'VIP Silver'}`
+                    : currentContactSalesSummaryFailed ? 'Unable to load ledger totals' : 'Checking qualification'}
+                </p>
+              </section>
+              <section className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800/60">
+                <h2 className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Current Month Sales · Ledger</h2>
+                <p className="mt-1 break-words text-base font-bold tabular-nums text-slate-900 dark:text-white">
+                  {currentContactSalesSummary ? formatCurrency(currentContactSalesSummary.currentMonth) : currentContactSalesSummaryFailed ? 'Unavailable' : 'Loading…'}
+                </p>
+              </section>
+            </div>
+          )}
           </div>
       </div>
 

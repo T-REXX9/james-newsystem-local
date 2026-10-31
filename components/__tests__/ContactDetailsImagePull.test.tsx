@@ -2,6 +2,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ContactDetails from '../ContactDetails';
+import { customerLedgerService } from '../../services/customerLedgerService';
 import { CustomerStatus } from '../../types';
 
 vi.mock('../CustomerMetricsView', () => ({ default: () => null }));
@@ -174,5 +175,52 @@ describe('ContactDetails image expansion', () => {
     const numbersList = screen.getByRole('list', { name: 'Contact numbers' });
     expect(within(numbersList).getAllByText('0917-123-4567')).toHaveLength(1);
     expect(screen.queryByText('T1:')).not.toBeInTheDocument();
+  });
+
+  it('does not show the previous customer ledger summary while a new customer loads', async () => {
+    let resolveSecondLedger!: (value: unknown) => void;
+    const secondLedger = new Promise((resolve) => {
+      resolveSecondLedger = resolve;
+    });
+    const ledgerSpy = vi.spyOn(customerLedgerService, 'getLedger')
+      .mockResolvedValueOnce({
+        metrics: {
+          last_month_sales: 12000,
+          monthly_sales: 6000,
+          ledger_monthly_sales: 6000,
+          vip_status: 'silver',
+          vip_one_time_discount_threshold: 10000,
+          vip_unlimited_discount_threshold: 30000,
+        },
+      } as any)
+      .mockReturnValueOnce(secondLedger as ReturnType<typeof customerLedgerService.getLedger>);
+
+    const initialProps = {
+      contact: { id: 'customer-1', company: 'First Customer', status: CustomerStatus.ACTIVE } as any,
+      currentUser: { id: 'agent-1', role: 'Sales Agent' } as any,
+      showAgentSalesReportInOverview: true,
+      onClose: vi.fn(),
+      onUpdate: vi.fn(),
+    };
+    const { rerender } = render(<ContactDetails {...initialProps} />);
+    await waitFor(() => expect(screen.getByText('₱12,000')).toBeInTheDocument());
+
+    rerender(<ContactDetails {...initialProps} contact={{ ...initialProps.contact, id: 'customer-2', company: 'Second Customer' }} />);
+    expect(screen.getAllByText('Loading…')).toHaveLength(3);
+    expect(screen.queryByText('₱12,000')).not.toBeInTheDocument();
+
+    resolveSecondLedger({
+      metrics: {
+        last_month_sales: 35000,
+        monthly_sales: 20000,
+        ledger_monthly_sales: 20000,
+        vip_status: 'gold',
+        vip_one_time_discount_threshold: 10000,
+        vip_unlimited_discount_threshold: 30000,
+      },
+    });
+    await waitFor(() => expect(screen.getByText('₱35,000')).toBeInTheDocument());
+    expect(screen.getByText('₱20,000')).toBeInTheDocument();
+    ledgerSpy.mockRestore();
   });
 });

@@ -52,6 +52,7 @@ const mapApiItem = (item: any, invoiceId: string): InvoiceItem => ({
   item_id: String(item?.item_refno || item?.item_id || ''),
   qty: toNumber(item?.qty, 0),
   part_no: String(item?.part_no || ''),
+  brand: String(item?.brand || ''),
   item_code: String(item?.item_code || ''),
   description: String(item?.description || ''),
   unit_price: toNumber(item?.unit_price, 0),

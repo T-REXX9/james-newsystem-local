@@ -305,6 +305,7 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
                 <th>Item Code</th>
                 <th className="qty">Qty</th>
                 <th>Location</th>
+                <th>Brand</th>
                 <th>Part No.</th>
                 <th>Description</th>
                 <th>Unit Price</th>
@@ -321,6 +322,7 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
                     <td>{item.item_code || '-'}</td>
                     <td className="qty">{item.qty}</td>
                     <td>{item.location || '-'}</td>
+                    <td>{item.brand || '-'}</td>
                     <td>{item.part_no || '-'}</td>
                     <td>{item.description || '-'}</td>
                     <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
@@ -332,7 +334,7 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
               <tr>
                 <td colSpan={2} style={{ textAlign: 'right' }}><strong>Total Qty</strong></td>
                 <td className="qty"><strong>{formatMoney(totalQty)}</strong></td>
-                <td colSpan={5} style={{ textAlign: 'right' }}><strong>Grand Total</strong></td>
+                <td colSpan={6} style={{ textAlign: 'right' }}><strong>Grand Total</strong></td>
                 <td className="amount">
                   <strong>{formatMoney(Number(order.grand_total || totalAmount))}</strong>
                 </td>
@@ -346,7 +348,7 @@ const SalesOrderPrintPreview: React.FC<SalesOrderPrintPreviewProps> = ({
                   vip_discount_amount: order.vip_discount_amount,
                 })}
                 formatMoney={formatMoney}
-                grandTotalColSpan={8}
+                grandTotalColSpan={9}
                 amountClassName="amount"
               />
             </tbody>

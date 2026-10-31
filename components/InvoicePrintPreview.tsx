@@ -142,6 +142,12 @@ const printStyles = `
     white-space: nowrap;
   }
 
+  .invoice-item-details {
+    font-size: 0.58rem;
+    line-height: 1.1;
+    overflow-wrap: anywhere;
+  }
+
   .invoice-bottom {
     display: flex;
     gap: 0.4rem;
@@ -405,7 +411,12 @@ const InvoicePrintPreview: React.FC<InvoicePrintPreviewProps> = ({
                 <tr key={item.id || `${item.item_code || item.part_no || 'item'}-${index}`}>
                   <td className="qty">{item.qty}</td>
                   <td>PC</td>
-                  <td>{item.description || item.item_code || item.part_no || '-'}</td>
+                  <td className="invoice-item-details">
+                    <div>{item.description || '-'}</div>
+                    <div>Item Code: {item.item_code || '-'} | Part No.: {item.part_no || '-'}</div>
+                    <div>Location: {item.location || '-'} | Brand: {item.brand || '-'}</div>
+                    <div>Remark: {item.remark || '-'}</div>
+                  </td>
                   <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
                   <td className="amount">{formatMoney(lineAmount(item))}</td>
                 </tr>

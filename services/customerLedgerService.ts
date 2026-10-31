@@ -25,6 +25,8 @@ export type CustomerLedgerMetrics = {
   monthly_sales: number;
   ledger_monthly_sales?: number;
   last_month_sales: number;
+  vip_one_time_discount_threshold: number;
+  vip_unlimited_discount_threshold: number;
   customer_since: string | null;
   credit_limit: number;
   terms: string;
@@ -287,6 +289,8 @@ export const customerLedgerService = {
         monthly_sales: toNumber(data?.metrics?.monthly_sales),
         ledger_monthly_sales: toNumber(data?.metrics?.ledger_monthly_sales ?? data?.metrics?.monthly_sales),
         last_month_sales: toNumber(data?.metrics?.last_month_sales),
+        vip_one_time_discount_threshold: toNumber(data?.metrics?.vip_one_time_discount_threshold, 10000),
+        vip_unlimited_discount_threshold: toNumber(data?.metrics?.vip_unlimited_discount_threshold, 30000),
         customer_since: data?.metrics?.customer_since || null,
         credit_limit: toNumber(data?.metrics?.credit_limit),
         terms: String(data?.metrics?.terms || ''),

@@ -1577,6 +1577,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                       <th className="px-3 py-2 text-left">Part No.</th>
                       <th className="px-3 py-2 text-left">Item Code</th>
                       <th className="px-3 py-2 text-left">Location</th>
+                      <th className="px-3 py-2 text-left">Brand</th>
                       <th className="px-3 py-2 text-left">Description</th>
                       <th className="px-3 py-2 text-left">Qty</th>
                       <th className="px-3 py-2 text-left">Unit Price</th>
@@ -1591,6 +1592,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.part_no || '-'}</td>
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.item_code || '-'}</td>
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.location || '-'}</td>
+                        <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.brand || '-'}</td>
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.description || '-'}</td>
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.qty}</td>
                         <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.unit_price)}</td>
@@ -1601,7 +1603,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={7} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
+                      <td colSpan={8} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
                       <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-700">
                         <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(selectedOrder.grand_total)}</span>
                       </td>
@@ -1610,7 +1612,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
                     <VipDocumentTotals
                       discount={vipDiscount}
                       formatMoney={formatCurrency}
-                      grandTotalColSpan={7}
+                    grandTotalColSpan={9}
                     />
                   </tfoot>
                 </table>

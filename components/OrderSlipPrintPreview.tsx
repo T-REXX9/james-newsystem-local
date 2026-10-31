@@ -68,12 +68,14 @@ const printStyles = `
   .order-slip-item-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 10px;
   }
 
   .order-slip-meta-table th,
   .order-slip-item-table th,
   .order-slip-item-table td {
-    padding: 0.45rem 0.65rem;
+    padding: 0.3rem 0.35rem;
     border: 1px solid #d4d4d8;
     vertical-align: top;
   }
@@ -294,10 +296,16 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
           <table className="order-slip-item-table" style={{ marginTop: '1rem' }}>
             <thead>
               <tr>
-                <th style={{ width: '14%' }}>Quantity</th>
-                <th>Description</th>
-                <th style={{ width: '18%' }}>Unit Price</th>
-                <th style={{ width: '20%', textAlign: 'center' }}>Amount</th>
+                <th style={{ width: '4%' }}>#</th>
+                <th style={{ width: '10%' }}>Item Code</th>
+                <th style={{ width: '10%' }}>Part No.</th>
+                <th style={{ width: '8%' }}>Location</th>
+                <th style={{ width: '9%' }}>Brand</th>
+                <th style={{ width: '25%' }}>Description</th>
+                <th style={{ width: '6%' }}>Qty</th>
+                <th style={{ width: '10%' }}>Unit Price</th>
+                <th style={{ width: '10%', textAlign: 'center' }}>Amount</th>
+                <th style={{ width: '8%' }}>Remark</th>
               </tr>
             </thead>
             <tbody>
@@ -305,22 +313,29 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
                 const amount = Number(item.amount || Number(item.qty || 0) * Number(item.unit_price || 0));
                 return (
                   <tr key={item.id || `${item.item_code || item.part_no || 'item'}-${index}`}>
+                    <td>{index + 1}</td>
+                    <td>{item.item_code || '-'}</td>
+                    <td>{item.part_no || '-'}</td>
+                    <td>{item.location || '-'}</td>
+                    <td>{item.brand || '-'}</td>
+                    <td>{item.description || '-'}</td>
                     <td>{item.qty}</td>
-                    <td>{item.description || item.item_code || item.part_no || '-'}</td>
                     <td className="order-slip-unit-price">{formatMoney(Number(item.unit_price || 0))}</td>
                     <td className="order-slip-amount">
                       <strong>{formatMoney(amount)}</strong>
                     </td>
+                    <td>{item.remark || '-'}</td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
               <tr className="order-slip-total-row">
-                <td colSpan={3} style={{ textAlign: 'right' }}>Total =&gt; &nbsp;</td>
+                <td colSpan={8} style={{ textAlign: 'right' }}>Total =&gt; &nbsp;</td>
                 <td className="order-slip-amount">
                   <span className="order-slip-total-pill">{formatMoney(totalAmount)}</span>
                 </td>
+                <td></td>
               </tr>
               <VipDocumentTotals
                 discount={persistedVipDiscount({
@@ -331,7 +346,7 @@ const OrderSlipPrintPreview: React.FC<OrderSlipPrintPreviewProps> = ({
                   vip_discount_amount: orderSlip.vip_discount_amount,
                 })}
                 formatMoney={formatMoney}
-                grandTotalColSpan={3}
+                grandTotalColSpan={9}
                 amountClassName="order-slip-amount"
               />
             </tfoot>

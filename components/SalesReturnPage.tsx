@@ -460,7 +460,7 @@ const CreateModal: React.FC<{
     remark: '',
     date: new Date().toISOString().slice(0, 10),
     ship_via: '', tracking_no: '', note: '', complaint_note: '',
-    discount_amt: '0', tax_type: 'Exclusive', invoice_no: '', transaction_refno: '',
+    discount_amt: '0', invoice_no: '', transaction_refno: '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -489,7 +489,7 @@ const CreateModal: React.FC<{
         remark: '',
         date: new Date().toISOString().slice(0, 10),
         ship_via: '', tracking_no: '', note: '', complaint_note: '',
-        discount_amt: '0', tax_type: 'Exclusive', invoice_no: '', transaction_refno: '',
+        discount_amt: '0', invoice_no: '', transaction_refno: '',
       });
       fetchContacts().then(setCustomers).catch(() => setCustomers([]));
       salesReturnService.sourceDocuments('', 50).then(setSourceDocs).catch(() => setSourceDocs([]));
@@ -541,6 +541,10 @@ const CreateModal: React.FC<{
   };
 
   const handleCreate = async () => {
+    if (!form.customer_id) {
+      setError('Select a customer to determine tax type.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -1215,7 +1219,6 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                   <label className="text-right font-['Oswald'] text-[16px] text-[#263f52]">Remark:</label>
                   <input aria-label="Remark" readOnly={!isPending || !canEdit} value={headerDraft.remark || ''} onChange={(e) => updateHeaderDraft('remark', e.target.value)} className="h-[34px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3" />
                   <label className="text-right">Discount:</label><input aria-label="Discount Amount" type="number" min="0" step="0.01" readOnly={!isPending || !canEdit} value={headerDraft.discount_amt || '0'} onChange={(e) => updateHeaderDraft('discount_amt', e.target.value)} className="h-[34px] rounded border px-3" />
-                  <label className="text-right">Tax Type:</label><select aria-label="Tax Type" disabled={!isPending || !canEdit} value={headerDraft.tax_type || 'Exclusive'} onChange={(e) => updateHeaderDraft('tax_type', e.target.value)} className="h-[34px] rounded border px-3"><option>Exclusive</option><option>Inclusive</option><option>None</option></select>
                   <label className="text-right">Comment / Instruction:</label><input aria-label="Comment / Instruction" readOnly={!isPending || !canEdit} value={headerDraft.note || ''} onChange={(e) => updateHeaderDraft('note', e.target.value)} className="h-[34px] rounded border px-3" />
                   <label className="text-right">Customer Complaint:</label><input aria-label="Customer Complaint" readOnly={!isPending || !canEdit} value={headerDraft.complaint_note || ''} onChange={(e) => updateHeaderDraft('complaint_note', e.target.value)} className="h-[34px] rounded border px-3" />
                 </div>

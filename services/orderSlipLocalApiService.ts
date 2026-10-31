@@ -64,6 +64,7 @@ const mapApiItem = (item: any, orderSlipId: string): OrderSlipItem => ({
   item_code: String(item?.item_code || ''),
   location: String(item?.location || ''),
   description: String(item?.description || ''),
+  brand: String(item?.brand || ''),
   unit_price: toNumber(item?.unit_price, 0),
   amount: toNumber(item?.amount, toNumber(item?.qty, 0) * toNumber(item?.unit_price, 0)),
   remark: String(item?.remark || ''),

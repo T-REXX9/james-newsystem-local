@@ -57,6 +57,7 @@ const INITIAL_VISIBLE_ROWS = 30;
 const VISIBLE_ROWS_STEP = 30;
 const DO_NOT_CONTACT_CUSTOMER_STATUS = 4;
 const DAILY_CALL_BATCH_DNC_HISTORY_KEY = '__jamesDailyCallBatchDoNotContact';
+const VIP_SUMMARY_HISTORY_KEY = '__jamesDailyCallVipSummary';
 const DO_NOT_CONTACT_REASON_OPTIONS = [
   'Contact number can’t be reached',
   'Do not sell diesel parts',
@@ -452,6 +453,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const fullCustomerRowsRef = useRef<DailyCallCustomerRow[] | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<DailyCallCustomerRow | null>(null);
+  const [selectedVipSummary, setSelectedVipSummary] = useState<{ label: string; tier: 'silver' | 'gold'; rows: DailyCallMasterCustomerRow[] } | null>(null);
+  const selectedVipSummaryRef = useRef(selectedVipSummary);
+  const vipSummaryTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const vipSummaryCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const vipSummaryDialogRef = useRef<HTMLElement | null>(null);
+  const ownsVipSummaryHistoryEntry = useRef(false);
   const [selectedMasterRow, setSelectedMasterRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [showAddProspectModal, setShowAddProspectModal] = useState(false);
   const [editingProspect, setEditingProspect] = useState<Contact | null>(null);
@@ -496,6 +503,97 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingTeams, setLoadingTeams] = useState(true);
   const [assigningCustomerId, setAssigningCustomerId] = useState<string | null>(null);
   const [replyModalRow, setReplyModalRow] = useState<DailyCallMasterCustomerRow | null>(null);
+
+  const closeVipSummary = useCallback(() => {
+    const historyState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (ownsVipSummaryHistoryEntry.current && historyState[VIP_SUMMARY_HISTORY_KEY] === true) {
+      window.history.back();
+      return;
+    }
+    ownsVipSummaryHistoryEntry.current = false;
+    setSelectedVipSummary(null);
+  }, []);
+
+  const openVipSummary = useCallback((summary: NonNullable<typeof selectedVipSummary>, trigger: HTMLButtonElement) => {
+    vipSummaryTriggerRef.current = trigger;
+    selectedVipSummaryRef.current = summary;
+    setSelectedVipSummary(summary);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedVipSummary) return;
+    const currentState = window.history.state && typeof window.history.state === 'object'
+      ? window.history.state as Record<string, unknown>
+      : {};
+    if (currentState[VIP_SUMMARY_HISTORY_KEY] !== true) {
+      window.history.pushState({ ...currentState, [VIP_SUMMARY_HISTORY_KEY]: true }, '', window.location.href);
+    }
+    ownsVipSummaryHistoryEntry.current = true;
+  }, [selectedVipSummary]);
+
+  useEffect(() => {
+    const syncVipSummaryWithHistory = (event: PopStateEvent) => {
+      const historyState = event.state && typeof event.state === 'object'
+        ? event.state as Record<string, unknown>
+        : {};
+      const isSummaryOpen = historyState[VIP_SUMMARY_HISTORY_KEY] === true;
+      const wasSummaryOpen = ownsVipSummaryHistoryEntry.current;
+      ownsVipSummaryHistoryEntry.current = isSummaryOpen;
+      if (isSummaryOpen) {
+        if (selectedVipSummaryRef.current) setSelectedVipSummary(selectedVipSummaryRef.current);
+      } else if (wasSummaryOpen) {
+        setSelectedVipSummary(null);
+      }
+    };
+    window.addEventListener('popstate', syncVipSummaryWithHistory);
+    return () => window.removeEventListener('popstate', syncVipSummaryWithHistory);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedVipSummary) return;
+
+    const trigger = vipSummaryTriggerRef.current;
+    const dialog = vipSummaryDialogRef.current;
+    const closeButton = vipSummaryCloseButtonRef.current;
+    closeButton?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeVipSummary();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+
+      const focusableElements: HTMLElement[] = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      ));
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        closeButton?.focus();
+        return;
+      }
+
+      const first = focusableElements[0];
+      const last = focusableElements[focusableElements.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeyDown);
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [closeVipSummary, selectedVipSummary]);
   const duplicateComparisonSequence = useRef(0);
   const filterResetKey = JSON.stringify([
     activeCategoryId,
@@ -1074,8 +1172,19 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         : category.id === 'priority' || category.id === 'recovery' || category.id === 'blocked'
           ? sumBy(categoryRows, 'averageMonthlySales')
           : 0;
-    return { ...category, rows: categoryRows, currentSales, potentialSales };
-  }), [filteredRows]);
+    const vipRows = categoryRows.filter((row) => {
+      const tier = resolveVipDiscountLevel(row.currentMonthSales || 0, vipConfig);
+      return tier === 'silver' || tier === 'gold';
+    });
+    return {
+      ...category,
+      rows: categoryRows,
+      currentSales,
+      potentialSales,
+      vipSilverRows: vipRows.filter((row) => resolveVipDiscountLevel(row.currentMonthSales || 0, vipConfig) === 'silver'),
+      vipGoldRows: vipRows.filter((row) => resolveVipDiscountLevel(row.currentMonthSales || 0, vipConfig) === 'gold'),
+    };
+  }), [filteredRows, vipConfig]);
   const summaryCategoryData = categoryData.filter((category) => category.id !== 'all');
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -1559,6 +1668,14 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <div>
                   <p>Current Month Sales</p>
                   <p className={`text-base font-bold ${category.accent}`}>{peso.format(category.currentSales)}</p>
+                </div>
+                <div className="space-y-0.5 border-t border-slate-200/80 pt-2 text-left">
+                  <button type="button" onClick={(event) => openVipSummary({ label: category.label, tier: 'silver', rows: category.vipSilverRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-amber-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500" aria-label={`Show ${category.vipSilverRows.length} VIP Silver customers in ${category.label}`}>
+                    VIP Silver: {category.vipSilverRows.length}
+                  </button>
+                  <button type="button" onClick={(event) => openVipSummary({ label: category.label, tier: 'gold', rows: category.vipGoldRows }, event.currentTarget)} className="block w-full rounded text-left font-semibold text-yellow-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-500" aria-label={`Show ${category.vipGoldRows.length} VIP Gold customers in ${category.label}`}>
+                    VIP Gold: {category.vipGoldRows.length}
+                  </button>
                 </div>
                 {category.id === 'priority' && (
                   <div>
@@ -2182,6 +2299,28 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       <footer className="flex items-center justify-between px-2 pb-2 text-[11px] text-slate-500">
         <span>© 2026 TND-OPC. All rights reserved.</span><span>Version 1.0.0</span>
       </footer>
+
+      {selectedVipSummary ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeVipSummary(); }}>
+          <section ref={vipSummaryDialogRef} role="dialog" aria-modal="true" aria-labelledby="vip-summary-title" tabIndex={-1} className="flex max-h-[min(80vh,42rem)] w-full max-w-xl flex-col rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 id="vip-summary-title" className="text-base font-bold text-slate-900">{selectedVipSummary.tier === 'silver' ? 'VIP Silver' : 'VIP Gold'} customers</h2>
+                <p className="mt-1 text-xs text-slate-500">{selectedVipSummary.label} · current month ledger sales</p>
+              </div>
+              <button ref={vipSummaryCloseButtonRef} type="button" onClick={closeVipSummary} className="rounded p-1 text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500" aria-label="Close VIP customer list"><XCircle className="h-5 w-5" /></button>
+            </header>
+            <div className="overflow-y-auto p-4">
+              {selectedVipSummary.rows.length ? <ul className="space-y-2">{selectedVipSummary.rows.map((row) => (
+                <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2.5">
+                  <span className="min-w-0 break-words text-sm font-semibold text-slate-800">{row.shopName}</span>
+                  <span className="shrink-0 text-sm font-bold text-slate-700">{peso.format(row.currentMonthSales || 0)}</span>
+                </li>
+              ))}</ul> : <p className="py-8 text-center text-sm text-slate-500">No {selectedVipSummary.tier === 'silver' ? 'VIP Silver' : 'VIP Gold'} customers in this category.</p>}
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {pendingDoNotContactRow && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">

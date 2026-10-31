@@ -930,22 +930,22 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
             </div>
 
             <div className="mt-[9px] overflow-x-auto">
-              <table className="w-[97%] min-w-[900px] table-fixed border-collapse text-[12px]">
-                <colgroup><col className="w-[17.5%]" /><col className="w-[44.5%]" /><col className="w-[20.5%]" /><col className="w-[17.5%]" /></colgroup>
-                <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold"><th className="px-2 pb-2">Quantity</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Unit Price</th><th className="px-2 pb-2">Amount</th></tr></thead>
+              <table className="w-full min-w-[1400px] table-fixed border-collapse text-[12px]">
+                <colgroup><col className="w-[5%]" /><col className="w-[10%]" /><col className="w-[10%]" /><col className="w-[9%]" /><col className="w-[10%]" /><col className="w-[24%]" /><col className="w-[6%]" /><col className="w-[9%]" /><col className="w-[9%]" /><col className="w-[8%]" /></colgroup>
+                <thead><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold"><th className="px-2 pb-2">#</th><th className="px-2 pb-2">Item Code</th><th className="px-2 pb-2">Part No.</th><th className="px-2 pb-2">Location</th><th className="px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="px-2 pb-2">Qty</th><th className="px-2 pb-2">Unit Price</th><th className="px-2 pb-2">Amount</th><th className="px-2 pb-2">Remark</th></tr></thead>
                 <tbody>{selectedItems.length > 0 ? selectedItems.map((item, index) => <tr key={item.id || `${item.item_code}-${index}`} className="bg-[#fafafa]">
-                  <td className="px-2 py-[9px]"><input readOnly value={item.qty} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly value={item.description || ''} className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled value={String(item.unit_price || 0)} className={`${legacyInputClass} disabled:bg-white disabled:text-[#333]`}><option value={String(item.unit_price || 0)}>{Number(item.unit_price || 0).toFixed(2)}</option></select></td><td className="px-2 py-[9px]"><input readOnly value={Number(item.amount || 0).toFixed(2)} className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td>
-                </tr>) : <tr className="bg-[#fafafa]"><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td><td className="px-2 py-[9px]"><input readOnly className={legacyInputClass} /></td><td className="px-2 py-[9px]"><select disabled className={`${legacyInputClass} disabled:bg-white`}><option /></select></td><td className="px-2 py-[9px]"><input readOnly className="h-[35px] w-[70px] rounded border border-[#ccc] bg-white px-2" /></td></tr>}</tbody>
+                  <td className="px-2 py-[9px]">{index + 1}</td><td className="px-2 py-[9px]">{item.item_code || ''}</td><td className="px-2 py-[9px]">{item.part_no || ''}</td><td className="px-2 py-[9px]">{item.location || ''}</td><td className="px-2 py-[9px]">{item.brand || ''}</td><td className="px-2 py-[9px] break-words">{item.description || ''}</td><td className="px-2 py-[9px]">{item.qty}</td><td className="px-2 py-[9px] text-right">{Number(item.unit_price || 0).toFixed(2)}</td><td className="px-2 py-[9px] text-right">{Number(item.amount || 0).toFixed(2)}</td><td className="px-2 py-[9px]">{item.remark || ''}</td>
+                </tr>) : <tr className="bg-[#fafafa]"><td colSpan={10} className="px-2 py-4 text-center text-[#777]">No items on this Order Slip.</td></tr>}</tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={4} className="px-2 py-[9px] text-right font-bold">
+                    <td colSpan={10} className="px-2 py-[9px] text-right font-bold">
                       Total: <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{Number(selectedSlip?.grand_total || 0).toFixed(2)}</span>
                     </td>
                   </tr>
                   <VipDocumentTotals
                     discount={vipDiscount}
                     formatMoney={(value) => value.toFixed(2)}
-                    grandTotalColSpan={3}
+                    grandTotalColSpan={9}
                   />
                 </tfoot>
               </table>
@@ -1328,11 +1328,13 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                     <th className="px-3 py-2 text-left">#</th>
                     <th className="px-3 py-2 text-left">Part No.</th>
                     <th className="px-3 py-2 text-left">Item Code</th>
-                    <th className="px-3 py-2 text-left">Location</th>
+                      <th className="px-3 py-2 text-left">Location</th>
+                      <th className="px-3 py-2 text-left">Brand</th>
                     <th className="px-3 py-2 text-left">Description</th>
                     <th className="px-3 py-2 text-left">Qty</th>
                     <th className="px-3 py-2 text-left">Unit Price</th>
-                    <th className="px-3 py-2 text-left">Amount</th>
+                      <th className="px-3 py-2 text-left">Amount</th>
+                      <th className="px-3 py-2 text-left">Remark</th>
                   </tr>
                 </thead>
                 <tbody className="text-slate-700 dark:text-slate-200">
@@ -1342,24 +1344,27 @@ const OrderSlipView: React.FC<OrderSlipViewProps> = ({ initialSlipId, initialSli
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.part_no || '-'}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.item_code || '-'}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.location || '-'}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.brand || '-'}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.description || '-'}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.qty}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.unit_price)}</td>
                       <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{formatCurrency(item.amount)}</td>
+                      <td className="px-3 py-2 border-t border-slate-200 dark:border-slate-700">{item.remark || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={7} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
+                    <td colSpan={8} className="px-3 py-3 text-right font-bold border-t border-slate-200 dark:border-slate-700">Grand Total</td>
                     <td className="px-3 py-3 border-t border-slate-200 dark:border-slate-700">
                       <span className="inline-flex rounded-full bg-brand-blue/10 px-3 py-1 font-bold text-brand-blue">{formatCurrency(selectedSlip.grand_total)}</span>
                     </td>
+                    <td className="border-t border-slate-200 dark:border-slate-700"></td>
                   </tr>
                   <VipDocumentTotals
                     discount={vipDiscount}
                     formatMoney={formatCurrency}
-                    grandTotalColSpan={7}
+                    grandTotalColSpan={9}
                   />
                 </tfoot>
               </table>
