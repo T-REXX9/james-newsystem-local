@@ -535,6 +535,7 @@ const MasterTableRow = React.memo(({
 }: MasterTableRowProps) => {
   const isSelected = selectedClientId === row.contact.id;
   const locationLabel = getContactLocationLabel(row.contact);
+
   return (
     <tr
       className={`cursor-pointer border-b border-slate-100 bg-white transition-colors hover:bg-blue-50/35 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/70 ${densityConfig.rowPadding} ${isSelected ? 'bg-blue-50/70 dark:bg-brand-blue/10' : ''}`}
@@ -2319,6 +2320,10 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     },
   } as const;
 
+  const bookmarkedCustomer = baseMasterRows.find(
+    (row) => row.contact.id === bookmarkedContactId && !isBlockedContact(row.contact)
+  );
+
   return (
     <div ref={viewScrollRef} className="h-full min-h-0 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/70 text-[#10244c] dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:text-white">
       <AddContactModal
@@ -2531,42 +2536,47 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         </div>
       )}
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Segregated customer category tables">
-        {customerListSummaries.map((summary) => {
+      <section aria-label="Customer categories">
+        <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Customer list categories">
+          {customerListSummaries.map((summary) => (
+            <button
+              key={`${summary.id}-tab`}
+              id={`${summary.id}-customer-tab`}
+              type="button"
+              aria-pressed={expandedCustomerCategory === summary.id}
+              onClick={() => setExpandedCustomerCategory(summary.id)}
+              className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue ${expandedCustomerCategory === summary.id ? 'border-blue-700 bg-blue-700 text-white shadow-sm' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'}`}
+            >
+              <span>{summary.label}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs ${expandedCustomerCategory === summary.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{summary.rows.length}</span>
+            </button>
+          ))}
+        </div>
+        {bookmarkedContactId && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] dark:border-emerald-900 dark:bg-emerald-950/40">
+            <span className="flex min-w-0 items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-200">
+              <Bookmark className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden="true" />
+              <span className="truncate">{bookmarkedCustomer ? `Stop after ${bookmarkedCustomer.contact.company}` : 'Calling stop saved'}</span>
+            </span>
+            <button type="button" onClick={() => void handleSetCallBookmark(null)} disabled={savingBookmark} className="shrink-0 rounded px-1.5 py-1 font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-200 dark:hover:bg-emerald-900">
+              Clear
+            </button>
+          </div>
+        )}
+        <div>
+        <section className="grid grid-cols-1 gap-3" aria-label="Customer category table">
+        {customerListSummaries.filter((summary) => summary.id === expandedCustomerCategory).map((summary) => {
           const tone = summaryToneClasses[summary.tone];
-          const isExpanded = expandedCustomerCategory === summary.id;
-          const bookmarkedCustomer = summary.id === 'priority'
-            ? baseMasterRows.find((row) => row.contact.id === bookmarkedContactId && !isBlockedContact(row.contact))
-            : undefined;
           return (
-            <article key={`${summary.id}-table`} className={`flex min-w-0 min-h-[24rem] h-[min(70vh,35rem)] flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-[grid-column,height] duration-300 dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both] ${isExpanded ? 'sm:col-span-2 max-sm:min-h-[24rem]' : 'col-span-1 max-sm:h-[min(38vh,20rem)] max-sm:min-h-[18rem]'}`}>
+            <article key={`${summary.id}-table`} className="flex min-w-0 min-h-[24rem] h-[min(70vh,35rem)] flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm dark:border-slate-800 dark:bg-slate-900/95 motion-safe:animate-[james-fade-up_500ms_cubic-bezier(0.22,1,0.36,1)_both]">
               <h2 className="min-w-0">
-                <button
-                  type="button"
-                  aria-expanded={isExpanded}
-                  aria-controls={`${summary.id}-customer-list`}
-                  onClick={() => setExpandedCustomerCategory(summary.id)}
-                  className={`flex min-h-[58px] w-full items-center justify-between gap-2 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-blue ${isExpanded ? 'border-b border-slate-200 dark:border-slate-800' : ''}`}
-                  title={`${summary.label} (${summary.note})`}
-                >
+                <div className="flex min-h-[58px] items-center justify-between gap-2 border-b border-slate-200 px-3 py-3 text-left dark:border-slate-800" title={`${summary.label} (${summary.note})`}>
                   <span className={`min-w-0 truncate text-sm font-extrabold uppercase leading-tight ${tone.title}`}>
                     {summary.label} <span className="text-[10px] normal-case">({summary.note})</span>
                   </span>
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${tone.icon}`} aria-hidden="true" />
-                </button>
-              </h2>
-
-              {summary.id === 'priority' && bookmarkedContactId && (
-                <div className="flex items-center justify-between gap-2 border-b border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] dark:border-emerald-900 dark:bg-emerald-950/40">
-                  <span className="flex min-w-0 items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-200">
-                    <Bookmark className="h-3.5 w-3.5 shrink-0 fill-current" aria-hidden="true" />
-                    <span className="truncate">{bookmarkedCustomer ? `Stop after ${bookmarkedCustomer.contact.company}` : 'Calling stop saved'}</span>
-                  </span>
-                  <button type="button" onClick={() => void handleSetCallBookmark(null)} disabled={savingBookmark} className="shrink-0 rounded px-1.5 py-1 font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-200 dark:hover:bg-emerald-900">
-                    Clear
-                  </button>
                 </div>
-              )}
+              </h2>
 
               <div id={`${summary.id}-customer-list`} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50/50 p-2 dark:bg-slate-950/30">
                 {summary.rows.length === 0 ? (
@@ -2773,6 +2783,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
         })}
       </section>
       </div>
+      </section>
       {detailsPanelOpen && selectedClient && (
         <div
           className="fixed inset-x-0 bottom-0 top-auto z-50 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl animate-in slide-in-from-bottom-10 duration-300 dark:border-slate-800 dark:bg-slate-900 sm:bottom-0 sm:left-auto sm:right-0 sm:top-16 sm:h-auto sm:max-h-none sm:w-full sm:max-w-2xl sm:rounded-none sm:rounded-l-2xl sm:border-l sm:border-t-0 sm:slide-in-from-right-10"
@@ -3351,6 +3362,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
           currentUser={currentUser}
         />
       )}
+      </div>
     </div>
   );
 };

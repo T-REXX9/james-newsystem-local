@@ -427,7 +427,7 @@ const App: React.FC = () => {
           {};
 
         return isSalesAgent ? (
-          <div className="p-4 h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
+          <div className="h-full overflow-y-auto bg-slate-100 dark:bg-slate-950">
             <DailyCallMonitoringView
               currentUser={userProfile}
               initialSelectedDate={context.dashboardDate}

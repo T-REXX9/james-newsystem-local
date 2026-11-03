@@ -226,7 +226,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     const toggle = await screen.findByRole('button', { name: /Sales summaries/i });
     expect(screen.getByLabelText('Daily call customer category summary cards')).toBeInTheDocument();
     expect(screen.queryByLabelText('Customer category summaries')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Segregated customer category tables')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer categories')).toBeInTheDocument();
 
     await user.click(toggle);
 
@@ -348,15 +348,11 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(screen.getByTestId('daily-call-summary-priority')).getByText('0', { exact: true })).toBeInTheDocument();
   });
 
-  it('expands only the selected category for all five customer lists', async () => {
+  it('shows one full-width customer list at a time and lets the agent switch among all categories', async () => {
     render(<DailyCallMonitoringView currentUser={currentUser} />);
-    const categoryGrid = await screen.findByLabelText('Segregated customer category tables');
-    expect(categoryGrid).toHaveClass('grid-cols-1', 'sm:grid-cols-2', 'lg:grid-cols-3', '2xl:grid-cols-6');
-    expect(categoryGrid).not.toHaveClass('min-w-[1200px]');
-    expect(await screen.findByText('Test Shop')).toBeInTheDocument();
-    for (const id of ['priority', 'recovery', 'verified', 'unverified', 'blocked']) {
-      expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
-    }
+    const categoryPicker = await screen.findByRole('group', { name: 'Customer list categories' });
+    const categoryTable = screen.getByLabelText('Customer category table');
+    expect(categoryTable).toBeInTheDocument();
 
     for (const [label, id] of [
       ['Priority List', 'priority'],
@@ -366,20 +362,14 @@ describe('DailyCallMonitoringView communication actions', () => {
       ['Blacklisted/Rejected', 'blocked'],
     ]) {
       await expandList(label);
-      const expandedButton = screen.getByRole('button', { name: new RegExp(`^${label}`, 'i') });
-      expect(expandedButton).toHaveAttribute('aria-expanded', 'true');
-      expect(expandedButton.closest('article')).toHaveClass('sm:col-span-2');
-      expect(expandedButton.closest('article')).toHaveClass('max-sm:min-h-[24rem]');
+      const selectedButton = within(categoryPicker).getByRole('button', { name: new RegExp(`^${label}`, 'i') });
+      expect(selectedButton).toHaveAttribute('aria-pressed', 'true');
+      expect(within(categoryPicker).getAllByRole('button').filter((button) => button.getAttribute('aria-pressed') === 'true')).toHaveLength(1);
+      expect(categoryTable.querySelectorAll('article')).toHaveLength(1);
       expect(document.getElementById(`${id}-customer-list`)).toBeInTheDocument();
-      expect(screen.getByText('Test Shop')).toBeInTheDocument();
-      const categoryButtons = screen.getAllByRole('button', { name: /^(Priority List|Recovery List|Verified Prospects|Unverified Prospects|blacklisted\/rejected)/i });
-      expect(categoryButtons.filter((button) => button.getAttribute('aria-expanded') === 'true')).toHaveLength(1);
-      for (const button of categoryButtons) {
-        if (button === expandedButton) {
-          expect(button.closest('article')).toHaveClass('sm:col-span-2');
-        } else {
-          expect(button.closest('article')).toHaveClass('col-span-1', 'max-sm:h-[min(38vh,20rem)]', 'max-sm:min-h-[18rem]');
-        }
+      expect(within(categoryTable).getByTitle(new RegExp(`^${label}`, 'i'))).toBeInTheDocument();
+      if (id === 'unverified') {
+        expect(within(categoryTable).getByText('Test Shop')).toBeInTheDocument();
       }
     }
   });
@@ -587,7 +577,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     });
 
     render(<DailyCallMonitoringView currentUser={currentUser} />);
-    await expandList('Priority List', user);
+    await expandList('Recovery List', user);
     expect(screen.queryByRole('button', { name: 'Mark Test Shop Do Not Call' })).not.toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Test Shop Do Not Call' })).toBeInTheDocument();
   });
@@ -603,7 +593,7 @@ describe('DailyCallMonitoringView communication actions', () => {
     setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
 
     render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
-    await expandList('Priority List', user);
+    await expandList('Recovery List', user);
     const button = await screen.findByRole('button', { name: 'Mark Test Shop Do Not Call' });
     await user.click(button);
 
@@ -759,24 +749,23 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(verifiedSummary).getByText('0')).toBeInTheDocument();
     expect(within(unverifiedSummary).getByText('1')).toBeInTheDocument();
 
-    const categoryTables = screen.getByLabelText('Segregated customer category tables');
-    const priorityTable = within(categoryTables)
+    const categoryTable = screen.getByLabelText('Customer category table');
+    const priorityTable = within(categoryTable)
       .getByTitle('Priority List (Any ledger activity since October 2025 onwards)')
       .closest('article')!;
-    const recoveryTable = within(categoryTables)
-      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
-      .closest('article')!;
-    const unverifiedTable = within(categoryTables)
-      .getByTitle('Unverified Prospects (No purchases yet)')
-      .closest('article')!;
-
     const cadenceRow = within(priorityTable).getByText('Cadence Window Shop').closest('tr')!;
     const freshRow = within(priorityTable).getByText('Fresh Purchase Shop').closest('tr')!;
     expect(cadenceRow.compareDocumentPosition(freshRow)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 
     await expandList('Recovery List');
+    const recoveryTable = within(categoryTable)
+      .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
+      .closest('article')!;
     expect(within(recoveryTable).getByText('Overdue Shop')).toBeInTheDocument();
     await expandList('Unverified Prospects');
+    const unverifiedTable = within(categoryTable)
+      .getByTitle('Unverified Prospects (No purchases yet)')
+      .closest('article')!;
     expect(within(unverifiedTable).getByText('No Purchase Shop')).toBeInTheDocument();
   });
 
@@ -892,13 +881,13 @@ describe('DailyCallMonitoringView communication actions', () => {
 
     // Client symptom: a Test Client record still appears in the prospect list.
     // (Deletion is handled by migration 039; this UI assertion documents the unwanted inclusion path.)
-    const categoryTables = screen.getByLabelText('Segregated customer category tables');
-    const unverifiedTable = within(categoryTables)
+    await expandList('Unverified Prospects');
+    const categoryTable = screen.getByLabelText('Customer category table');
+    const unverifiedTable = within(categoryTable)
       .getByTitle('Unverified Prospects (No purchases yet)')
       .closest('article')!;
     // Soft-delete is a data migration; until deleted, prospective Test Client still lists here.
     // After migration 039, API no longer returns these rows. Keep the fixture to prove list membership rules.
-    await expandList('Unverified Prospects');
     expect(within(unverifiedTable).getByText('Test Client')).toBeInTheDocument();
   });
 
@@ -1464,8 +1453,8 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(screen.queryByText('Other Customers')).not.toBeInTheDocument();
     await expandList('Recovery List');
 
-    const categoryTables = screen.getByLabelText('Segregated customer category tables');
-    const recoveryTable = within(categoryTables)
+    const categoryTable = screen.getByLabelText('Customer category table');
+    const recoveryTable = within(categoryTable)
       .getByTitle('Recovery List (Purchase history before October 2025, with none since)')
       .closest('article')!;
     expect(within(recoveryTable).getByText('Legacy Recovery Customer')).toBeInTheDocument();
