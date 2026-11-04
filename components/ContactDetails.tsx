@@ -127,11 +127,12 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
         lastMonth,
         currentMonth: Number(ledger.metrics.ledger_monthly_sales ?? ledger.metrics.monthly_sales ?? 0),
         vipLevel,
-        nextVipThreshold: vipLevel === 'gold'
-          ? null
-          : vipLevel === 'silver'
-            ? ledger.metrics.vip_unlimited_discount_threshold
-            : ledger.metrics.vip_one_time_discount_threshold,
+        // VIP standing is earned from last month's spend and applies this month.
+        // Show this month's remaining spend to qualify for the next month, or
+        // retain Gold when the customer is already at the highest spend tier.
+        nextVipThreshold: vipLevel === 'regular'
+          ? ledger.metrics.vip_one_time_discount_threshold
+          : ledger.metrics.vip_unlimited_discount_threshold,
       });
       setSalesSummaryFailedContactId(null);
     }).catch((error: unknown) => {
@@ -146,7 +147,14 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
   const vipTierLabel = currentContactSalesSummary?.vipLevel === 'gold' ? 'VIP Gold' : currentContactSalesSummary?.vipLevel === 'silver' ? 'VIP Silver' : 'Regular';
   const nextVipAmount = currentContactSalesSummary?.nextVipThreshold === null || !currentContactSalesSummary
     ? null
-    : Math.max(0, currentContactSalesSummary.nextVipThreshold - currentContactSalesSummary.lastMonth);
+    : Math.max(0, currentContactSalesSummary.nextVipThreshold - currentContactSalesSummary.currentMonth);
+  const vipProgressLabel = currentContactSalesSummary && nextVipAmount !== null
+    ? nextVipAmount === 0
+      ? currentContactSalesSummary.vipLevel === 'regular' ? 'VIP Silver secured for next month' : 'VIP Gold secured for next month'
+      : currentContactSalesSummary.vipLevel === 'gold'
+        ? `${formatCurrency(nextVipAmount)} this month to retain VIP Gold next month`
+        : `${formatCurrency(nextVipAmount)} this month to qualify for ${currentContactSalesSummary.vipLevel === 'silver' ? 'VIP Gold' : 'VIP Silver'} next month`
+    : null;
 
   const buildChangedFields = (previous: Contact, next: Omit<Contact, 'id'>) => {
     const changed: Record<string, { oldValue: unknown; newValue: unknown }> = {};
@@ -512,7 +520,7 @@ const ContactDetails: React.FC<ContactDetailsProps> = ({ contact, currentUser, p
                 <p className="mt-1 break-words text-base font-bold text-slate-900 dark:text-white">{currentContactSalesSummary ? vipTierLabel : currentContactSalesSummaryFailed ? 'Unavailable' : 'Loading…'}</p>
                 <p className="mt-0.5 break-words text-xs text-slate-600 dark:text-slate-300">
                   {currentContactSalesSummary
-                    ? nextVipAmount === null ? 'Top tier reached' : `${formatCurrency(nextVipAmount)} to ${currentContactSalesSummary.vipLevel === 'silver' ? 'VIP Gold' : 'VIP Silver'}`
+                    ? vipProgressLabel
                     : currentContactSalesSummaryFailed ? 'Unable to load ledger totals' : 'Checking qualification'}
                 </p>
               </section>

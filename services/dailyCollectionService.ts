@@ -271,6 +271,20 @@ export const dailyCollectionService = {
     }
   },
 
+  async updateCollectionHeader(refno: string, collectionNo: string, date: string): Promise<void> {
+    const ctx = getUserContext();
+    await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        main_id: ctx.mainId,
+        user_id: ctx.userId,
+        collection_no: collectionNo,
+        date,
+      }),
+    });
+  },
+
   async getCollectionItems(refno: string): Promise<DailyCollectionItem[]> {
     const data = await requestApi(`${API_BASE_URL}/collections/${encodeURIComponent(refno)}/items`);
     const rows = Array.isArray(data?.items) ? data.items : [];

@@ -16,7 +16,7 @@ describe('stockMovementLocalApiService', () => {
     });
   });
 
-  it('excludes hidden products from Stock Movement search choices', async () => {
+  it('includes inactive products in Stock Movement search choices', async () => {
     await searchStockMovementProducts({
       part_no: 'PN-1',
       item_code: 'ITEM-1',
@@ -26,7 +26,7 @@ describe('stockMovementLocalApiService', () => {
     });
 
     expect(fetchProductsPage).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'active',
+      status: 'all',
       partNo: 'PN-1',
       itemCode: 'ITEM-1',
       description: 'brake',

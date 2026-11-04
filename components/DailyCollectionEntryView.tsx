@@ -82,6 +82,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   const [headers, setHeaders] = useState<DailyCollectionHeader[]>([]);
   const [selectedRefno, setSelectedRefno] = useState<string>(initialCollectionRefNo || '');
   const [selectedHeader, setSelectedHeader] = useState<DailyCollectionHeader | null>(null);
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [headerDraft, setHeaderDraft] = useState({ collectionNo: '', date: '' });
   const [items, setItems] = useState<DailyCollectionItem[]>([]);
   const [approverLogs, setApproverLogs] = useState<DailyCollectionApproverLog[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
@@ -397,6 +399,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   }, [search]);
 
   useEffect(() => {
+    setEditingHeader(false);
     if (!selectedRefno) {
       setSelectedHeader(null);
       setItems([]);
@@ -628,6 +631,41 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     }
   };
 
+  const startEditingHeader = () => {
+    if (!canEdit || !selectedHeader) return;
+    setHeaderDraft({
+      collectionNo: selectedHeader.lcolection_no || '',
+      date: toDateInput(selectedHeader.ldatetime),
+    });
+    setEditingHeader(true);
+  };
+
+  const saveEditedHeader = async () => {
+    if (!canEdit || !selectedRefno || !selectedHeader || !headerDraft.collectionNo.trim() || !headerDraft.date) return;
+    const dateCheck = validateDocumentDateWrite({
+      hasBackdatedPosting,
+      proposedYmd: headerDraft.date,
+      previousYmd: toDateInput(selectedHeader.ldatetime) || null,
+      todayYmd: collectionDateMax,
+    });
+    if (!dateCheck.ok) {
+      setError(dateCheck.reason);
+      return;
+    }
+    setWorkingAction('update-header');
+    setError('');
+    try {
+      await dailyCollectionService.updateCollectionHeader(selectedRefno, headerDraft.collectionNo.trim(), headerDraft.date);
+      setEditingHeader(false);
+      await Promise.all([fetchDetail(selectedRefno), fetchList()]);
+    } catch (err: any) {
+      if (shouldSuppressAuthError(err)) return;
+      setError(err?.message || 'Failed to update collection report');
+    } finally {
+      setWorkingAction('');
+    }
+  };
+
   const handlePostSelectedItems = async () => {
     if (!canPost || !selectedRefno || selectedItemIds.length === 0) return;
     setWorkingAction('post-items');
@@ -748,12 +786,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
   };
 
   const startEditingItem = (item: DailyCollectionItem) => {
-    if (
-      !canEdit
-      || selectedHeader?.lstatus !== 'Pending'
-      || item.lpost === 1
-      || item.lcollection_status === 'Posted'
-    ) return;
+    if (!canEdit) return;
     setEditingItemId(item.lid);
     setEditingUnpaidRows([]);
     setEditingSelectedTransactions({});
@@ -1206,12 +1239,44 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
                   <div>
                     <h2 className="border-b border-[#dce5ec] pb-3 font-['Oswald'] text-lg font-semibold text-[#315574]">Daily Collection Entry</h2>
-                    <p className="mt-3 font-['Oswald'] text-xl font-semibold text-[#263f52]">
-                      {selectedHeader?.lcolection_no || selectedRefno}
-                    </p>
-                    <p>
-                      Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}
-                    </p>
+                    {editingHeader ? (
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          DCR No.
+                          <input
+                            className={`${INPUT_CLASS} min-w-40`}
+                            value={headerDraft.collectionNo}
+                            onChange={(event) => setHeaderDraft((current) => ({ ...current, collectionNo: event.target.value }))}
+                            disabled={workingAction === 'update-header'}
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs text-slate-600">
+                          Collection Date
+                          <input
+                            type="date"
+                            className={INPUT_CLASS}
+                            value={headerDraft.date}
+                            max={collectionDateMax}
+                            onChange={(event) => setHeaderDraft((current) => ({ ...current, date: event.target.value }))}
+                            disabled={workingAction === 'update-header' || !canMutateCollectionDates}
+                          />
+                        </label>
+                        <div className="flex gap-2">
+                          <button className={BUTTON_PRIMARY} onClick={() => void saveEditedHeader()} disabled={!!workingAction || !headerDraft.collectionNo.trim() || !headerDraft.date}>
+                            {workingAction === 'update-header' ? 'Saving...' : 'Save Changes'}
+                          </button>
+                          <button className={BUTTON_BASE} onClick={() => setEditingHeader(false)} disabled={!!workingAction}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="mt-3 font-['Oswald'] text-xl font-semibold text-[#263f52]">
+                          {selectedHeader?.lcolection_no || selectedRefno}
+                        </p>
+                        <p>Date: {toDisplayDate(selectedHeader?.ldatetime) || '-'}</p>
+                        {canEdit && <button type="button" className={`${BUTTON_BASE} mt-2`} onClick={startEditingHeader}>Edit Report Details</button>}
+                      </>
+                    )}
                     <p>Created Timestamp: {formatAccountingTimestamp(selectedHeader?.created_at)}</p>
                     <p>
                       Ref No.: {selectedRefno}
@@ -1239,7 +1304,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                       >
                         Delete Selected
                       </button>}
-                      {canPost && <button
+                      {canPost && selectedHeader?.lstatus === 'Posted' && <button
                         className={`${BUTTON_SUCCESS} disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handlePostSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
@@ -1332,7 +1397,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                       )}
                       {!detailLoading && items.map((item, index) => {
                         const posted = item.lpost === 1 || item.lcollection_status === 'Posted';
-                        const canEditLine = canEdit && selectedHeader?.lstatus === 'Pending' && !posted;
+                        const deletable = item.lcollection_status === 'Pending' && item.lpost !== 1;
+                        const canEditLine = canEdit;
                         const isEditing = editingItemId === item.lid && editingItem !== null;
                         return (
                           <tr
@@ -1340,17 +1406,18 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                             className={`${isEditing ? 'bg-[#edf4f9]' : index % 2 === 0 ? 'bg-white' : 'bg-[#f8fafc]'} transition-colors hover:bg-[#f1f6fa]`}
                           >
                             <td className="px-2 py-2">
-                              <input
-                                type="checkbox"
-                                className="accent-brand-blue"
-                                checked={selectedItemIds.includes(item.lid)}
-                                disabled={posted}
-                                onChange={(e) => {
-                                  setSelectedItemIds((prev) => (
-                                    e.target.checked ? [...prev, item.lid] : prev.filter((id) => id !== item.lid)
-                                  ));
-                                }}
-                              />
+                              {canDelete && deletable && (
+                                <input
+                                  type="checkbox"
+                                  className="accent-brand-blue"
+                                  checked={selectedItemIds.includes(item.lid)}
+                                  onChange={(e) => {
+                                    setSelectedItemIds((prev) => (
+                                      e.target.checked ? [...prev, item.lid] : prev.filter((id) => id !== item.lid)
+                                    ));
+                                  }}
+                                />
+                              )}
                             </td>
                             <td className="break-words px-2 py-2">
                               {isEditing ? (
@@ -1467,7 +1534,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                   className={`${SELECT_CLASS} w-full mt-2`}
                                   value={editingItem.status}
                                   onChange={(e) => setEditingItem((current) => current ? { ...current, status: e.target.value } : current)}
-                                  disabled={savingItemId === item.lid}
+                                  disabled={savingItemId === item.lid || (posted && item.lstatus.toLowerCase() === 'cancelled')}
                                 >
                                   {LEGACY_COLLECTION_ITEM_STATUSES.map((statusOption) => (
                                     <option key={statusOption} value={statusOption}>
@@ -1489,11 +1556,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                               ) : (item.lremarks || '-')}
                             </td>
                             <td className="px-2 py-2">
-                              {posted ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
-                                  Posted
-                                </span>
-                              ) : isEditing ? (
+                              {isEditing ? (
                                 <div className="flex flex-wrap gap-2">
                                   <button
                                     className={`${BUTTON_PRIMARY} disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -1512,6 +1575,11 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                 </div>
                               ) : (
                                 <div className="flex flex-wrap gap-2">
+                                  {posted && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
+                                      Posted
+                                    </span>
+                                  )}
                                   {canEditLine && (
                                     <button
                                       className={`${BUTTON_BASE} disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -1521,7 +1589,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                       Edit
                                     </button>
                                   )}
-                                  {canDelete && (
+                                  {canDelete && deletable && (
                                     <button
                                       className={`${BUTTON_BASE} text-red-600 border-red-300 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed`}
                                       onClick={() => handleDeleteItem(item.lid)}

@@ -25,6 +25,7 @@ vi.mock('../../services/dailyCollectionService', async () => {
       getApproverLogs: vi.fn(),
       getCustomers: vi.fn(),
       getUnpaidTransactions: vi.fn(),
+      addPayment: vi.fn(),
       updateItem: vi.fn(),
     },
   };
@@ -92,6 +93,7 @@ describe('DailyCollectionEntryView scrolling', () => {
     vi.mocked(dailyCollectionService.getApproverLogs).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getCustomers).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([]);
+    vi.mocked(dailyCollectionService.addPayment).mockResolvedValue();
     vi.mocked(dailyCollectionService.updateItem).mockResolvedValue(null);
   });
 
@@ -155,6 +157,76 @@ describe('DailyCollectionEntryView scrolling', () => {
     const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
     expect(collectionDateInput).toBeTruthy();
     await waitFor(() => expect(collectionDateInput).not.toBeDisabled());
+  });
+
+  it('sends the selected backdated collection date when adding a customer payment', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_add: true },
+          pages: { 'Daily Collection Entry': { can_add: true } },
+          can_backdate: true,
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+    vi.mocked(dailyCollectionService.getCustomers).mockResolvedValue([
+      { id: 'customer-backdated', code: 'CB-1', company: 'Backdated Customer' },
+    ]);
+
+    render(<DailyCollectionEntryView />);
+    fireEvent.click((await screen.findAllByText('DCR-1'))[0]);
+
+    const collectionDateLabel = await screen.findByText('Collection Date');
+    const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
+    expect(collectionDateInput).toBeTruthy();
+    fireEvent.change(collectionDateInput as HTMLInputElement, { target: { value: '2024-01-04' } });
+    expect(screen.queryByRole('button', { name: 'Post Selected' })).not.toBeInTheDocument();
+
+    const customerInput = await screen.findByPlaceholderText('Search customer');
+    fireEvent.change(customerInput, { target: { value: 'Backdated Customer' } });
+    fireEvent.click(await screen.findByText((_, element) => (
+      element?.tagName === 'DIV' && element.textContent === 'Backdated Customer'
+    )));
+    fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '100.00' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add Customer' }));
+
+    await waitFor(() => {
+      expect(dailyCollectionService.addPayment).toHaveBeenCalledWith(
+        'REF-1',
+        expect.objectContaining({
+          customerId: 'customer-backdated',
+          collectDate: '2024-01-04',
+          amount: 100,
+        }),
+      );
+    });
+  });
+
+  it('only offers payment-line posting after the DCR header is posted', async () => {
+    vi.mocked(dailyCollectionService.getCollection).mockResolvedValue({
+      lrefno: 'REF-1',
+      lcolection_no: 'DCR-1',
+      lstatus: 'Posted',
+      ldatetime: '2024-01-04',
+      total_amt: 100,
+      created_by: 'staff-1',
+    });
+    vi.mocked(dailyCollectionService.listCollections).mockResolvedValueOnce([{
+      lrefno: 'REF-1',
+      lcolection_no: 'DCR-1',
+      lstatus: 'Posted',
+      ldatetime: '2024-01-04',
+      total_amt: 100,
+      created_by: 'staff-1',
+    }]);
+
+    render(<DailyCollectionEntryView />);
+    fireEvent.click((await screen.findAllByText('DCR-1'))[0]);
+
+    expect(await screen.findByRole('button', { name: 'Post Selected' })).toBeInTheDocument();
   });
 
   it('lets a user with Edit permission correct an unposted payment line', async () => {

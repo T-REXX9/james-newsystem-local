@@ -73,4 +73,28 @@ describe('dailyCollectionService payment types', () => {
       transactions: [{ transaction_no: 'INV-2', transaction_refno: 'INV-REF-2' }],
     });
   });
+
+  it('sends the chosen business date in the payment create request', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({ collection_item_id: 3 }));
+
+    await dailyCollectionService.addPayment('DCR-1', {
+      customerId: 'customer-1',
+      type: 'Cash',
+      bank: '',
+      checkNo: '',
+      checkDate: '',
+      amount: 100,
+      status: 'Received',
+      remarks: '',
+      collectDate: '2024-01-04',
+      transactions: [],
+    });
+
+    const [, request] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      collect_date: '2024-01-04',
+      customer_id: 'customer-1',
+      amount: 100,
+    });
+  });
 });

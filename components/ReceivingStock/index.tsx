@@ -220,7 +220,7 @@ const ReceivingStock: React.FC<ReceivingStockProps> = ({ initialRRId, initialRRR
 
             <main className="min-w-0 flex-1 p-4 lg:p-6">
                 {viewMode === 'view' && selectedRrId ? (
-                    <ReceivingView rrId={selectedRrId} onBack={handleBackToList} onCreateNew={handleCreateNew} />
+                    <ReceivingView rrId={selectedRrId} onBack={handleBackToList} onCreateNew={handleCreateNew} onStatusChange={() => void fetchRRs()} />
                 ) : (
                     <div className="flex h-full items-center justify-center rounded-xl border border-slate-200 bg-white shadow-sm">
                         <div className="text-center">

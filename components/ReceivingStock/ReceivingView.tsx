@@ -27,6 +27,7 @@ interface ReceivingViewProps {
     rrId: string;
     onBack: () => void;
     onCreateNew: () => void;
+    onStatusChange?: () => void;
 }
 
 type LineDraft = { qty: number | '' };
@@ -78,7 +79,7 @@ const validateLineDrafts = (
     return null;
 };
 
-const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew }) => {
+const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew, onStatusChange }) => {
     const { addToast } = useToast();
     const canAdd = canPerformAction('can_add');
     const canEdit = canPerformAction('can_edit');
@@ -155,6 +156,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             }
             addToast({ type: 'success', message: "Receiving Report finalized and inventory updated!" });
             await fetchRR(); // Refresh to see updated status
+            onStatusChange?.();
             setShowFinalizeConfirm(false);
             setIncompleteDeliveryReason('');
         } catch (error: any) {
@@ -172,7 +174,10 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
                 if (kind === 'unpost') await receivingService.unpostReceivingReport(rr.id, reason);
                 else await receivingService.deleteReceivingReport(rr.id, reason);
                 addToast({ type: 'success', message: `${kind === 'unpost' ? 'Receiving Report unposted' : 'Receiving Report deleted'}.` });
-                if (kind === 'delete') onBack(); else await fetchRR();
+                if (kind === 'delete') onBack(); else {
+                    await fetchRR();
+                    onStatusChange?.();
+                }
             } catch (error: any) {
       if (shouldSuppressAuthError(error)) return;
                 addToast({ type: 'error', message: error.message || `Failed to ${kind} Receiving Report` });
@@ -188,6 +193,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             await receivingService.updateReceivingReport(rr.id, { status: 'Draft' } as never);
             addToast({ type: 'success', message: 'Receiving Report reopened.' });
             await fetchRR();
+            onStatusChange?.();
         } catch (error: any) {
       if (shouldSuppressAuthError(error)) return;
             addToast({ type: 'error', message: error.message || 'Failed to reopen Receiving Report' });

@@ -204,6 +204,7 @@ describe('ContactDetails image expansion', () => {
     };
     const { rerender } = render(<ContactDetails {...initialProps} />);
     await waitFor(() => expect(screen.getByText('₱12,000')).toBeInTheDocument());
+    expect(screen.getByText('₱24,000 this month to qualify for VIP Gold next month')).toBeInTheDocument();
 
     rerender(<ContactDetails {...initialProps} contact={{ ...initialProps.contact, id: 'customer-2', company: 'Second Customer' }} />);
     expect(screen.getAllByText('Loading…')).toHaveLength(3);
@@ -221,6 +222,32 @@ describe('ContactDetails image expansion', () => {
     });
     await waitFor(() => expect(screen.getByText('₱35,000')).toBeInTheDocument());
     expect(screen.getByText('₱20,000')).toBeInTheDocument();
+    expect(screen.getByText('₱10,000 this month to retain VIP Gold next month')).toBeInTheDocument();
     ledgerSpy.mockRestore();
+  });
+
+  it('shows current-month spend still needed to retain Gold after last month qualified the customer', async () => {
+    vi.spyOn(customerLedgerService, 'getLedger').mockResolvedValue({
+      metrics: {
+        last_month_sales: 32550,
+        monthly_sales: 0,
+        ledger_monthly_sales: 0,
+        vip_status: 'gold',
+        vip_one_time_discount_threshold: 10000,
+        vip_unlimited_discount_threshold: 30000,
+      },
+    } as any);
+
+    render(
+      <ContactDetails
+        contact={{ id: 'customer-gold', company: 'Gold Customer', status: CustomerStatus.ACTIVE } as any}
+        currentUser={{ id: 'agent-1', role: 'Sales Agent' } as any}
+        showAgentSalesReportInOverview
+        onClose={vi.fn()}
+        onUpdate={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText('₱30,000 this month to retain VIP Gold next month')).toBeInTheDocument();
   });
 });
