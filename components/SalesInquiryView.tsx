@@ -91,6 +91,7 @@ interface InquiryItemRow extends Omit<SalesInquiryItem, 'id' | 'inquiry_id' | 'q
   tempId?: string;
   isNew?: boolean; // Flag to indicate if the row is new and editable via autocomplete
   isManual?: boolean;
+  available_stock?: number;
 }
 
 type LoadedFormSnapshot = {
@@ -496,6 +497,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     // Use writable VIP 1/2/3 codes — not silver/gold — so lookup matches Product Database columns.
     const price = getProductPrice(product, normalizeToWritablePriceCode(priceGroup));
+    const availableStock = Number(product.total_stock ?? 0);
     setItems(prev => prev.map(item => {
       if (item.tempId === activeRowId) {
         return {
@@ -508,6 +510,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           description: product.description,
           unit_price: price,
           amount: (item.qty || 1) * price,
+          available_stock: availableStock,
+          remark: availableStock <= 0
+            ? 'OutStock'
+            : Number(item.qty || 1) > availableStock ? 'Insufficient Stock' : 'OnStock',
           isNew: false,
           isManual: false,
         };
@@ -1006,6 +1012,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         // Auto-calculate amount
         if (field === 'qty' || field === 'unit_price') {
           updated.amount = (Number(updated.qty) || 0) * (Number(updated.unit_price) || 0);
+        }
+        if (field === 'qty' && updated.item_id && typeof updated.available_stock === 'number') {
+          updated.remark = updated.available_stock <= 0
+            ? 'OutStock'
+            : Number(updated.qty || 0) > updated.available_stock ? 'Insufficient Stock' : 'OnStock';
         }
         return updated;
       }
