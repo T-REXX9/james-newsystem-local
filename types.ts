@@ -811,6 +811,9 @@ export interface DailyCallCustomerRow {
 
 export interface DailyCallMasterCustomerRow {
   id: string;
+  /** Active Priority List to Recovery List override, recorded in Agent Sales Report history. */
+  isOverridden?: boolean;
+  overrideReason?: string;
   doNotContact?: boolean;
   doNotContactReason?: string;
   shopName: string;

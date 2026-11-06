@@ -24,7 +24,7 @@ type ListCategoryInput = Pick<
 >;
 
 type MonitorBucketInput = ListCategoryInput &
-  Pick<DailyCallMasterCustomerRow, 'customerStatus' | 'debtType' | 'profileType' | 'verification' | 'verifiedInSystem'>;
+  Pick<DailyCallMasterCustomerRow, 'customerStatus' | 'debtType' | 'profileType' | 'verification' | 'verifiedInSystem' | 'isOverridden'>;
 
 /** Legacy status 3 = Prospective in tblpatient.lstatus. */
 const isProspectiveCustomerStatus = (customerStatus?: number) => Number(customerStatus) === 3;
@@ -91,6 +91,7 @@ export const resolveDailyCallListCategory = (row: ListCategoryInput): DailyCallL
  */
 export const resolveDailyCallMonitorBucket = (row: MonitorBucketInput): DailyCallMonitorBucket | null => {
   if (isBlockedDailyCallMasterRow(row)) return 'blocked';
+  if (row.isOverridden) return 'recovery';
 
   const listCategory = resolveDailyCallListCategory(row);
   if (listCategory === 'priority') return 'priority';

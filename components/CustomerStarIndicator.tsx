@@ -79,6 +79,7 @@ interface CustomerStarIndicatorProps {
   customerId?: string | number | null;
   isStarred?: boolean;
   className?: string;
+  showStar?: boolean;
 }
 
 const IDENTIFIER_STYLES: Record<CustomerIdentifier, string> = {
@@ -91,7 +92,7 @@ const IDENTIFIER_STYLES: Record<CustomerIdentifier, string> = {
 };
 
 /** Shows the shared, read-only star marker next to a customer name. */
-const CustomerStarIndicator: React.FC<CustomerStarIndicatorProps> = ({ customerId, isStarred, className = 'h-3.5 w-3.5' }) => {
+const CustomerStarIndicator: React.FC<CustomerStarIndicatorProps> = ({ customerId, isStarred, className = 'h-3.5 w-3.5', showStar = true }) => {
   const starredIds = useContext(CustomerStarContext);
   const identifiersById = useContext(CustomerIdentifierContext);
   const normalizedId = String(customerId ?? '').trim();
@@ -99,7 +100,7 @@ const CustomerStarIndicator: React.FC<CustomerStarIndicatorProps> = ({ customerI
   const identifiers = normalizedId ? identifiersById?.get(normalizedId) : undefined;
   return (
     <>
-      {starred && <Star aria-label="Starred customer" title="Starred customer" className={`${className} shrink-0 text-amber-500`} fill="currentColor" />}
+      {showStar && starred && <Star aria-label="Starred customer" title="Starred customer" className={`${className} shrink-0 text-amber-500`} fill="currentColor" />}
       {identifiers?.map((identifier) => (
         <span
           key={identifier}

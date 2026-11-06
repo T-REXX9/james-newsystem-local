@@ -27,7 +27,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import BlockIcon from '@mui/icons-material/Block';
 import CallIcon from '@mui/icons-material/Call';
-import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, getCachedDailyCallMasterList, invalidateDailyCallMasterListCache, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, createContact, fetchContactById, fetchSalesAgents, getAssignmentHistory, isPendingDuplicateProspectApproval, mapApiCustomerToContact, setCustomerStarred, updateContact } from '../services/customerDatabaseLocalApiService';
 import { createDuplicateProspectRequest, fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../services/customerWorkflowLocalApiService';
 import type { CustomerRequest } from '../services/customerWorkflowLocalApiService';
@@ -76,6 +76,19 @@ const sendDoNotContactSalesReportEntry = (
   body: `${isRequest ? 'Do Not Contact request' : 'Do Not Contact'}\nReason: ${reason}`,
   senderName: currentUser?.full_name || currentUser?.email || 'Staff',
   statusNote: isStatusNote,
+});
+
+const sendPriorityListOverrideSalesReportEntry = (
+  contactId: string,
+  enabled: boolean,
+  reason: string,
+  currentUser: UserProfile | null | undefined,
+) => sendSalesReportMessage({
+  contactId,
+  body: enabled
+    ? `Priority List Override: Enabled\nReason: ${reason}`
+    : 'Priority List Override: Removed',
+  senderName: currentUser?.full_name || currentUser?.email || 'Master User',
 });
 
 const peso = new Intl.NumberFormat('en-PH', {
@@ -141,7 +154,7 @@ const categories: CategoryDefinition[] = [
     border: 'border-emerald-200',
     softBg: 'bg-emerald-50/60',
     dot: 'bg-emerald-500',
-    matches: (row) => matchesDailyCallMonitorBucket(row, 'priority'),
+    matches: (row) => !row.isOverridden && matchesDailyCallMonitorBucket(row, 'priority'),
   },
   {
     id: 'recovery',
@@ -153,7 +166,8 @@ const categories: CategoryDefinition[] = [
     border: 'border-rose-200',
     softBg: 'bg-rose-50/60',
     dot: 'bg-rose-500',
-    matches: (row) => matchesDailyCallMonitorBucket(row, 'recovery'),
+    matches: (row) => !isBlockedDailyCallMasterRow(row)
+      && (Boolean(row.isOverridden) || matchesDailyCallMonitorBucket(row, 'recovery')),
   },
   {
     id: 'verified',
@@ -468,8 +482,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [loadingCustomerId, setLoadingCustomerId] = useState<string | null>(null);
   const [savingStarId, setSavingStarId] = useState<string | null>(null);
   const [pendingDoNotContactRow, setPendingDoNotContactRow] = useState<DailyCallMasterCustomerRow | null>(null);
+  const [pendingDoNotContactAction, setPendingDoNotContactAction] = useState<'blacklist' | 'override'>('blacklist');
   const [doNotContactReasonOption, setDoNotContactReasonOption] = useState('');
   const [doNotContactCustomReason, setDoNotContactCustomReason] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
   const [pendingDoNotCallRow, setPendingDoNotCallRow] = useState<DailyCallMasterCustomerRow | null>(null);
   const [doNotCallReason, setDoNotCallReason] = useState('');
   const [doNotCallReasonOption, setDoNotCallReasonOption] = useState('');
@@ -941,6 +957,32 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const handleConfirmDoNotContact = useCallback(async () => {
     const row = pendingDoNotContactRow;
     if (!row) return;
+    if (pendingDoNotContactAction === 'override') {
+      const reason = overrideReason.trim();
+      if (!isMasterUserType(currentUser) || !reason) {
+        addToast({ type: 'error', title: 'Reason required', description: 'Enter a reason before overriding the Priority List filter.' });
+        return;
+      }
+      setLoadingCustomerId(row.id);
+      try {
+        await sendPriorityListOverrideSalesReportEntry(row.id, true, reason, currentUser);
+        setRows((current) => current.map((item) => item.id === row.id
+          ? { ...item, isOverridden: true, overrideReason: reason }
+          : item));
+        setActiveCategoryId('recovery');
+        setVisibleLimit(INITIAL_VISIBLE_ROWS);
+        invalidateDailyCallMasterListCache();
+        setPendingDoNotContactRow(null);
+        setOverrideReason('');
+        await loadRows(false, true);
+        addToast({ type: 'success', title: 'Moved to Recovery List', description: `${row.shopName} now has a Priority List override.` });
+      } catch (error) {
+        addToast({ type: 'error', title: 'Unable to override Priority List filtering', description: getUserFacingErrorMessage(error, 'Please try again.') });
+      } finally {
+        setLoadingCustomerId(null);
+      }
+      return;
+    }
     const reason = doNotContactReasonOption === 'Other'
       ? doNotContactCustomReason.trim()
       : doNotContactReasonOption.trim();
@@ -1025,7 +1067,25 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     } finally {
       setLoadingCustomerId(null);
     }
-  }, [addToast, currentUser, doNotContactCustomReason, doNotContactReasonOption, loadRows, pendingDoNotContactRow]);
+  }, [addToast, currentUser, doNotContactCustomReason, doNotContactReasonOption, loadRows, overrideReason, pendingDoNotContactAction, pendingDoNotContactRow]);
+
+  const handleRemovePriorityListOverride = useCallback(async (row: DailyCallMasterCustomerRow) => {
+    if (!isMasterUserType(currentUser) || !row.isOverridden || loadingCustomerId) return;
+    setLoadingCustomerId(row.id);
+    try {
+      await sendPriorityListOverrideSalesReportEntry(row.id, false, '', currentUser);
+      setRows((current) => current.map((item) => item.id === row.id
+        ? { ...item, isOverridden: false, overrideReason: '' }
+        : item));
+      invalidateDailyCallMasterListCache();
+      await loadRows(false, true);
+      addToast({ type: 'success', title: 'Override removed', description: `${row.shopName} will follow the normal list filtering again.` });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to remove override', description: getUserFacingErrorMessage(error, 'Please try again.') });
+    } finally {
+      setLoadingCustomerId(null);
+    }
+  }, [addToast, currentUser, loadRows, loadingCustomerId]);
 
   useEffect(() => {
     // Sales totals must not be rendered from an in-memory list from a
@@ -2051,21 +2111,25 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             {row.shopName}
                           </button>
                           {isMasterUserAccount(currentUser) ? (
-                            <button
-                              type="button"
-                              onClick={(event) => { event.stopPropagation(); void handleToggleCustomerStar(row); }}
-                              disabled={savingStarId !== null}
-                              aria-label={`${row.isStarred ? 'Remove star from' : 'Star'} ${row.shopName}`}
-                              aria-pressed={Boolean(row.isStarred)}
-                              title={row.isStarred ? 'Remove customer star' : 'Star customer'}
-                              className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded align-middle hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50"
-                            >
-                              <Star aria-hidden="true" className={`h-3.5 w-3.5 ${row.isStarred ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); void handleToggleCustomerStar(row); }}
+                                disabled={savingStarId !== null}
+                                aria-label={`${row.isStarred ? 'Remove star from' : 'Star'} ${row.shopName}`}
+                                aria-pressed={Boolean(row.isStarred)}
+                                title={row.isStarred ? 'Remove customer star' : 'Star customer'}
+                                className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded align-middle hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-50"
+                              >
+                                <Star aria-hidden="true" className={`h-3.5 w-3.5 ${row.isStarred ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                              </button>
+                              <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" showStar={false} />
+                            </>
                           ) : (
                             <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           )}
                           {row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Do Not Call</span>}
+                          {row.isOverridden && <span role="status" aria-label={`${row.shopName} override to Recovery List`} title={row.overrideReason ? `Override reason: ${row.overrideReason}` : 'Priority List filtering overridden'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-amber-900">Override</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
                               Data repair needed
@@ -2239,13 +2303,29 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                               </button>
                               ) : canEditCustomerDatabase ? (
                                 <>
+                                {isMasterUserType(currentUser) && activeCategory.id === 'recovery' && row.isOverridden ? (
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove Recovery List override for ${row.shopName}`}
+                                    title={`Remove override for ${row.shopName}`}
+                                    onClick={() => void handleRemovePriorityListOverride(row)}
+                                    disabled={loadingCustomerId === row.id}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-amber-300 bg-amber-50 text-amber-800 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-1 disabled:opacity-60"
+                                  >
+                                    {loadingCustomerId === row.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   aria-label={`Blacklist or reject ${row.shopName}`}
-                                  title={`Blacklist / Reject ${row.shopName}`}
+                                  title={activeCategory.id === 'priority' && isMasterUserType(currentUser)
+                                    ? `Blacklist / Reject or Override to Recovery List: ${row.shopName}`
+                                    : `Blacklist / Reject ${row.shopName}`}
                                   onClick={() => {
+                                    setPendingDoNotContactAction('blacklist');
                                     setDoNotContactReasonOption('');
                                     setDoNotContactCustomReason('');
+                                    setOverrideReason('');
                                     setPendingDoNotContactRow(row);
                                   }}
                                   disabled={loadingCustomerId === row.id}
@@ -2335,47 +2415,83 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 <XCircle className="h-5 w-5" />
               </div>
               <div>
-                <h2 id="do-not-contact-confirm-title" className="text-base font-bold text-slate-950">Move to Blacklisted/Rejected List</h2>
+                <h2 id="do-not-contact-confirm-title" className="text-base font-bold text-slate-950">{pendingDoNotContactAction === 'override' ? 'Override Priority List filtering' : 'Move to Blacklisted/Rejected List'}</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Confirm that <span className="font-semibold text-slate-900">{pendingDoNotContactRow.shopName}</span> should be moved to Do Not Contact.
+                  {pendingDoNotContactAction === 'override'
+                    ? <>Move <span className="font-semibold text-slate-900">{pendingDoNotContactRow.shopName}</span> to the Recovery List regardless of its normal list category.</>
+                    : <>Confirm that <span className="font-semibold text-slate-900">{pendingDoNotContactRow.shopName}</span> should be moved to Do Not Contact.</>}
                 </p>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  This sets the customer status to Blacklisted and debt type to Bad. Unverified prospects will also be marked Rejected.
-                </p>
-                <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-reason">
-                  Reason for Do Not Contact <span className="text-rose-600">*</span>
-                  <select
-                    id="do-not-contact-reason"
-                    aria-label="Reason for Do Not Contact"
-                    value={doNotContactReasonOption}
-                    onChange={(event) => setDoNotContactReasonOption(event.target.value)}
-                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
-                  >
-                    <option value="">Choose a reason</option>
-                    {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                </label>
-                {doNotContactReasonOption === 'Other' && (
-                  <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-custom-reason">
-                    Your reason <span className="text-rose-600">*</span>
+                {activeCategoryId === 'priority' && isMasterUserType(currentUser) && (
+                  <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="daily-call-customer-action">
+                    Action
+                    <select
+                      id="daily-call-customer-action"
+                      aria-label="Customer action"
+                      value={pendingDoNotContactAction}
+                      onChange={(event) => setPendingDoNotContactAction(event.target.value as 'blacklist' | 'override')}
+                      className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                    >
+                      <option value="blacklist">Blacklist / Reject</option>
+                      <option value="override">Override to Recovery List</option>
+                    </select>
+                  </label>
+                )}
+                {pendingDoNotContactAction === 'override' && (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">The reason will be added to this customer’s Agent Sales Report history.</p>
+                )}
+                {pendingDoNotContactAction === 'override' ? (
+                  <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="priority-list-override-reason">
+                    Reason for override <span className="text-rose-600">*</span>
                     <textarea
-                      id="do-not-contact-custom-reason"
-                      aria-label="Other Do Not Contact reason"
-                      value={doNotContactCustomReason}
-                      onChange={(event) => setDoNotContactCustomReason(event.target.value)}
-                      maxLength={2000}
+                      id="priority-list-override-reason"
+                      aria-label="Reason for override"
+                      value={overrideReason}
+                      onChange={(event) => setOverrideReason(event.target.value)}
+                      maxLength={500}
                       rows={3}
-                      placeholder="State your reason"
-                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                      placeholder="Why should normal list filtering be bypassed?"
+                      className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                     />
                   </label>
+                ) : (
+                  <>
+                    <p className="mt-2 text-xs leading-5 text-slate-500">This sets the customer status to Blacklisted and debt type to Bad. Unverified prospects will also be marked Rejected.</p>
+                    <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-reason">
+                      Reason for Do Not Contact <span className="text-rose-600">*</span>
+                      <select
+                        id="do-not-contact-reason"
+                        aria-label="Reason for Do Not Contact"
+                        value={doNotContactReasonOption}
+                        onChange={(event) => setDoNotContactReasonOption(event.target.value)}
+                        className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                      >
+                        <option value="">Choose a reason</option>
+                        {DO_NOT_CONTACT_REASON_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    {doNotContactReasonOption === 'Other' && (
+                      <label className="mt-3 block text-xs font-semibold text-slate-700" htmlFor="do-not-contact-custom-reason">
+                        Your reason <span className="text-rose-600">*</span>
+                        <textarea
+                          id="do-not-contact-custom-reason"
+                          aria-label="Other Do Not Contact reason"
+                          value={doNotContactCustomReason}
+                          onChange={(event) => setDoNotContactCustomReason(event.target.value)}
+                          maxLength={2000}
+                          rows={3}
+                          placeholder="State your reason"
+                          className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-100"
+                        />
+                      </label>
+                    )}
+                  </>
                 )}
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setPendingDoNotContactRow(null)}
+                onClick={() => { setPendingDoNotContactRow(null); setOverrideReason(''); }}
                 disabled={loadingCustomerId === pendingDoNotContactRow.id}
                 className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
               >
@@ -2384,11 +2500,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               <button
                 type="button"
                 onClick={handleConfirmDoNotContact}
-                disabled={loadingCustomerId === pendingDoNotContactRow.id || !doNotContactReasonOption || (doNotContactReasonOption === 'Other' && !doNotContactCustomReason.trim())}
-                className="inline-flex items-center rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:opacity-60"
+                disabled={loadingCustomerId === pendingDoNotContactRow.id || (pendingDoNotContactAction === 'override' ? !overrideReason.trim() : (!doNotContactReasonOption || (doNotContactReasonOption === 'Other' && !doNotContactCustomReason.trim())))}
+                className={`inline-flex items-center rounded-md px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 ${pendingDoNotContactAction === 'override' ? 'bg-amber-700 hover:bg-amber-800' : 'bg-rose-600 hover:bg-rose-700'}`}
               >
                 {loadingCustomerId === pendingDoNotContactRow.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Mark Do Not Contact
+                {pendingDoNotContactAction === 'override' ? 'Move to Recovery List' : 'Mark Do Not Contact'}
               </button>
             </div>
           </div>

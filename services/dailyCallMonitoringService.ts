@@ -518,6 +518,9 @@ const mapDailyCallMasterCustomerRow = (row: any): DailyCallMasterCustomerRow => 
 
   return {
     id: String(row?.id || ''),
+    isOverridden: row?.isOverridden === true || row?.isOverridden === 1 || row?.isOverridden === '1'
+      || row?.is_overridden === true || row?.is_overridden === 1 || row?.is_overridden === '1',
+    overrideReason: cleanNullableText(row?.overrideReason ?? row?.override_reason),
     doNotContact: Boolean(row?.doNotContact ?? row?.do_not_contact),
     doNotContactReason: cleanNullableText(row?.doNotContactReason ?? row?.do_not_contact_reason),
     shopName: cleanNullableText(row?.shopName ?? row?.shop_name, 'Unnamed Shop'),

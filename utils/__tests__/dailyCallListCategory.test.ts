@@ -76,6 +76,23 @@ describe('dailyCallListCategory', () => {
     })).toBe('priority');
   });
 
+  it('routes a Priority List customer to Recovery while an override is active and restores normal filtering after removal', () => {
+    const row = {
+      customerStatus: 1,
+      debtType: 'Good',
+      purchaseCount: 2,
+      priorityTransactionCount: 2,
+      ledgerTransactionCount: 2,
+      historicalTransactionCount: 0,
+      lastPurchaseDateRaw: '2026-09-05',
+      listCategory: 'priority' as const,
+    };
+
+    expect(resolveDailyCallMonitorBucket({ ...row, isOverridden: true })).toBe('recovery');
+    expect(resolveDailyCallMonitorBucket({ ...row, isOverridden: false })).toBe('priority');
+    expect(resolveDailyCallMonitorBucket({ ...row, isOverridden: true, customerStatus: 4, debtType: 'Bad' })).toBe('blocked');
+  });
+
   it('keeps no-purchase prospects in Verified / Unverified for approval', () => {
     expect(resolveDailyCallMonitorBucket({
       profileType: 'Prospect',

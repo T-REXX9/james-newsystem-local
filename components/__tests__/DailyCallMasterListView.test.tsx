@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
 import { fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
-import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, invalidateDailyCallMasterListCache, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, updateContact, fetchSalesAgents, fetchContactById, mapApiCustomerToContact, setCustomerStarred } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
@@ -27,6 +27,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   setDailyCallDoNotContactFlag: vi.fn(),
   setDailyCallDoNotContactFlagsBulk: vi.fn(),
   getCachedDailyCallMasterList: vi.fn(() => null),
+  invalidateDailyCallMasterListCache: vi.fn(),
 }));
 
 vi.mock('../../services/customerDatabaseLocalApiService', () => ({
@@ -1030,6 +1031,47 @@ describe('DailyCallMasterListView', () => {
     expect(updateContact).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: 'Move to Blacklisted/Rejected List' })).not.toBeInTheDocument();
     expect(screen.getByText('Priority Buyer Shop')).toBeInTheDocument();
+  });
+
+  it('overrides Priority List filtering through Agent Sales Report and restores normal filtering when removed', async () => {
+    const user = userEvent.setup();
+    const priorityRow = {
+      id: 'priority-override-1', shopName: 'Priority Override Shop', province: 'Manila', city: 'Manila',
+      contactNumber: '0930', assignedTo: 'Joan Jerusalem', customerStatus: 1, debtType: 'Good',
+      lastPurchaseDate: 'May 26, 2026', lastPurchaseDateRaw: '2026-05-26', purchaseCount: 1,
+      priorityTransactionCount: 1, ledgerTransactionCount: 1, listCategory: 'priority' as const,
+      totalSales: 5000, currentMonthSales: 0, averageMonthlySales: 0, averageMonthlySalesMonthCount: 0,
+      recentThreeMonthSales: 0, previousThreeMonthSales: 0, salesTrendPercent: 0, daysSinceLastPurchase: 20,
+      monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+    };
+    vi.mocked(fetchDailyCallMasterList)
+      .mockResolvedValueOnce({ meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 }, pendingDuplicateProspects: [], items: [priorityRow] })
+      .mockResolvedValueOnce({ meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 }, pendingDuplicateProspects: [], items: [{ ...priorityRow, isOverridden: true, overrideReason: 'Keep calling during new contract review' }] })
+      .mockResolvedValueOnce({ meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 }, pendingDuplicateProspects: [], items: [priorityRow] });
+
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    await user.click(await screen.findByRole('button', { name: 'Blacklist or reject Priority Override Shop' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Move to Blacklisted/Rejected List' });
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Customer action' }), 'override');
+    expect(within(dialog).getByRole('button', { name: 'Move to Recovery List' })).toBeDisabled();
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason for override' }), 'Keep calling during new contract review');
+    await user.click(within(dialog).getByRole('button', { name: 'Move to Recovery List' }));
+
+    await waitFor(() => expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
+      contactId: 'priority-override-1',
+      body: 'Priority List Override: Enabled\nReason: Keep calling during new contract review',
+    })));
+    expect(invalidateDailyCallMasterListCache).toHaveBeenCalled();
+    expect(await screen.findByRole('status', { name: 'Priority Override Shop override to Recovery List' })).toHaveTextContent('Override');
+    await user.click(await screen.findByRole('button', { name: 'Remove Recovery List override for Priority Override Shop' }));
+
+    await waitFor(() => expect(sendSalesReportMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      contactId: 'priority-override-1',
+      body: 'Priority List Override: Removed',
+    })));
+    await user.click(screen.getByRole('button', { name: /^Priority List \(1\)$/ }));
+    expect(await screen.findByRole('button', { name: 'Blacklist or reject Priority Override Shop' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Priority Override Shop override to Recovery List' })).not.toBeInTheDocument();
   });
 
   it('shows the Do Not Call badge and remove action for flagged customers in the master list', async () => {
