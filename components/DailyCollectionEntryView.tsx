@@ -837,19 +837,6 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
       setError('Select a transaction for the new customer');
       return;
     }
-    if (editingItem.checkDate) {
-      const checkDateCheck = validateDocumentDateWrite({
-        hasBackdatedPosting,
-        proposedYmd: editingItem.checkDate,
-        previousYmd: toDateInput(item.lchk_date) || null,
-        todayYmd: collectionDateMax,
-      });
-      if (!checkDateCheck.ok) {
-        setError(checkDateCheck.reason);
-        return;
-      }
-    }
-
     setSavingItemId(item.lid);
     setError('');
     try {
@@ -896,19 +883,6 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
       setError(collectCheck.reason);
       return;
     }
-    if (form.checkDate) {
-      const checkDateCheck = validateDocumentDateWrite({
-        hasBackdatedPosting,
-        proposedYmd: form.checkDate,
-        previousYmd: null,
-        todayYmd: collectionDateMax,
-      });
-      if (!checkDateCheck.ok) {
-        setError(checkDateCheck.reason);
-        return;
-      }
-    }
-
     const transactions = unpaidRows
       .filter((row) => selectedTransactions[`${row.transactionType}:${row.lrefno}`])
       .map((row) => ({
@@ -922,15 +896,12 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
     setError('');
     try {
       const resolvedCollectDate = canMutateCollectionDates ? form.collectDate : collectionDateMax;
-      const resolvedCheckDate = form.checkDate
-        ? (canMutateCollectionDates ? form.checkDate : collectionDateMax)
-        : form.checkDate;
       await dailyCollectionService.addPayment(selectedRefno, {
         customerId: form.customerId,
         type: form.type,
         bank: form.bank,
         checkNo: form.checkNo,
-        checkDate: resolvedCheckDate,
+        checkDate: form.checkDate,
         amount,
         status: form.status,
         remarks: form.remarks,
@@ -1507,9 +1478,8 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                                   type="date"
                                   className={INPUT_CLASS}
                                   value={editingItem.checkDate}
-                                  max={collectionDateMax}
                                   onChange={(e) => setEditingItem((current) => current ? { ...current, checkDate: e.target.value } : current)}
-                                  disabled={savingItemId === item.lid || !canMutateCollectionDates}
+                                  disabled={savingItemId === item.lid}
                                 />
                               ) : (item.lchk_date ? toDisplayDate(item.lchk_date) : '-')}
                             </td>
@@ -1693,8 +1663,6 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                               type="date"
                               className={INPUT_CLASS}
                               value={form.checkDate}
-                              max={collectionDateMax}
-                              disabled={!canMutateCollectionDates}
                               onChange={(e) => setForm((prev) => ({ ...prev, checkDate: e.target.value }))}
                             />
                           </td>

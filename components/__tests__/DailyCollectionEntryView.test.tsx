@@ -106,7 +106,7 @@ describe('DailyCollectionEntryView scrolling', () => {
     expect(screen.getByText('Daily Collection Entry')).toBeInTheDocument();
   });
 
-  it('disables every collection date field without Backdated posting', async () => {
+  it('protects the collection date without Backdated posting while keeping check dates editable', async () => {
     render(<DailyCollectionEntryView />);
     await waitFor(() => expect(screen.getAllByText('DCR-1').length).toBeGreaterThan(0));
     fireEvent.click(screen.getAllByText('DCR-1')[0]);
@@ -117,9 +117,10 @@ describe('DailyCollectionEntryView scrolling', () => {
     expect(collectionDateInput).toBeTruthy();
     expect(collectionDateInput).toBeDisabled();
 
-    const dateInputs = Array.from(document.querySelectorAll('input[type="date"]'));
-    expect(dateInputs.length).toBeGreaterThanOrEqual(1);
-    dateInputs.forEach((input) => expect(input).toBeDisabled());
+    const checkDateInputs = Array.from(document.querySelectorAll('input[type="date"]'))
+      .filter((input) => input !== collectionDateInput);
+    expect(checkDateInputs).toHaveLength(1);
+    expect(checkDateInputs[0]).toBeEnabled();
   });
 
   it('refreshes granted Edit and Backdated posting permissions when the page opens', async () => {
@@ -159,7 +160,7 @@ describe('DailyCollectionEntryView scrolling', () => {
     await waitFor(() => expect(collectionDateInput).not.toBeDisabled());
   });
 
-  it('sends the selected backdated collection date when adding a customer payment', async () => {
+  it('accepts a future check date while adding a backdated collection payment', async () => {
     localAuthState.session = {
       userProfile: {
         id: 'staff-1',
@@ -183,6 +184,10 @@ describe('DailyCollectionEntryView scrolling', () => {
     const collectionDateInput = collectionDateLabel.parentElement?.querySelector('input[type="date"]');
     expect(collectionDateInput).toBeTruthy();
     fireEvent.change(collectionDateInput as HTMLInputElement, { target: { value: '2024-01-04' } });
+    const checkDateInput = Array.from(document.querySelectorAll('input[type="date"]'))
+      .find((input) => input !== collectionDateInput);
+    expect(checkDateInput).toBeTruthy();
+    fireEvent.change(checkDateInput as HTMLInputElement, { target: { value: '2027-03-15' } });
     expect(screen.queryByRole('button', { name: 'Post Selected' })).not.toBeInTheDocument();
 
     const customerInput = await screen.findByPlaceholderText('Search customer');
@@ -199,6 +204,7 @@ describe('DailyCollectionEntryView scrolling', () => {
         expect.objectContaining({
           customerId: 'customer-backdated',
           collectDate: '2024-01-04',
+          checkDate: '2027-03-15',
           amount: 100,
         }),
       );
