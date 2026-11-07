@@ -2204,10 +2204,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             <>
                               <button
                                 type="button"
-                                onClick={() => setReplyModalRow(row)}
-                                aria-label={`Reply to latest Agent Sales Report for ${row.shopName}`}
+                                onClick={() => void openCustomerDetails(row, 'sales-report')}
+                                aria-label={`Open ${row.shopName} customer profile and Agent Sales Report`}
                                 className="block w-full whitespace-pre-wrap text-left text-slate-700 underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                                title="Reply in Agent Sales Report"
+                                title="Open customer profile and Agent Sales Report"
                               >
                                 {row.latestSalesReportMessage}
                               </button>
