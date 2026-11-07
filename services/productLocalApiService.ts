@@ -364,6 +364,28 @@ export const updateProduct = async (id: string, updates: Partial<Product>): Prom
   if (!response.ok) throw new Error(await parseApiErrorMessage(response));
 };
 
+export const regenerateProductItemCode = async (
+  id: string,
+  productCodePrefix: string,
+): Promise<{ item_code: string; product_code_prefix: string }> => {
+  const { mainId, userId } = getLocalProductContext();
+  const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}/regenerate-item-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      main_id: mainId,
+      user_id: userId,
+      product_code_prefix: productCodePrefix,
+    }),
+  });
+  if (!response.ok) throw new Error(await parseApiErrorMessage(response));
+  const payload = await response.json();
+  return {
+    item_code: String(payload?.data?.item_code ?? ''),
+    product_code_prefix: String(payload?.data?.product_code_prefix ?? productCodePrefix),
+  };
+};
+
 export const fetchProductById = async (id: string): Promise<Product | null> => {
   const query = new URLSearchParams({ main_id: String(getLocalProductContext().mainId) });
   const response = await fetch(`${API_BASE_URL}/products/${encodeURIComponent(id)}?${query.toString()}`);

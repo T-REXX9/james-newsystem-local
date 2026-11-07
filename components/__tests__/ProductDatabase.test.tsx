@@ -7,6 +7,8 @@ import type { Product } from '../../types';
 const fetchProductsPageMock = vi.fn();
 const fetchProductCreateOptionsMock = vi.fn();
 const createProductMock = vi.fn();
+const regenerateProductItemCodeMock = vi.fn();
+const updateProductMock = vi.fn();
 const searchStockMovementProductsMock = vi.fn();
 const fetchProductMovementClassificationsMock = vi.fn();
 
@@ -15,7 +17,8 @@ vi.mock('../../services/productLocalApiService', () => ({
   fetchProductCreateOptions: (...args: any[]) => fetchProductCreateOptionsMock(...args),
   fetchProductById: vi.fn(),
   createProduct: (...args: any[]) => createProductMock(...args),
-  updateProduct: vi.fn(),
+  regenerateProductItemCode: (...args: any[]) => regenerateProductItemCodeMock(...args),
+  updateProduct: (...args: any[]) => updateProductMock(...args),
   deleteProduct: vi.fn(),
 }));
 
@@ -116,6 +119,8 @@ describe('ProductDatabase', () => {
       priceGroups: [],
     });
     createProductMock.mockResolvedValue(undefined);
+    regenerateProductItemCodeMock.mockResolvedValue({ item_code: 'QK-123', product_code_prefix: 'QK-' });
+    updateProductMock.mockResolvedValue(undefined);
     searchStockMovementProductsMock.mockResolvedValue([]);
     fetchProductMovementClassificationsMock.mockResolvedValue(new Map());
   });
@@ -164,6 +169,23 @@ describe('ProductDatabase', () => {
     }));
     expect(await screen.findByRole('option', { name: 'NEW-' })).toBeInTheDocument();
     expect(fetchProductCreateOptionsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('regenerates an existing product code when its field is cleared and a prefix is selected', async () => {
+    render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
+
+    await screen.findByText('QK2-001');
+    fireEvent.click(screen.getByTitle('View full details'));
+    fireEvent.change(screen.getByDisplayValue(sampleProduct.item_code), { target: { value: '' } });
+
+    const prefixSelect = screen.getByRole('combobox', { name: 'New item code prefix' });
+    expect(prefixSelect).toHaveValue('');
+    fireEvent.change(prefixSelect, { target: { value: 'QK-' } });
+
+    await vi.waitFor(() => expect(regenerateProductItemCodeMock).toHaveBeenCalledWith(sampleProduct.id, 'QK-'));
+    expect(await screen.findByDisplayValue('QK-123')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'New item code prefix' })).not.toBeInTheDocument();
+    expect(updateProductMock).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

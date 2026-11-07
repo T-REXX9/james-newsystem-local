@@ -85,9 +85,7 @@ export const searchStockMovementProducts = async (
     description: filters?.description || '',
     application: filters?.application || '',
     originalPn: filters?.original_pn || '',
-    // Stock Movement is a history lookup: inactive and discontinued products
-    // must remain searchable so their existing inventory logs can be reviewed.
-    status: 'all',
+    status: 'active',
     page: 1,
     perPage: Math.max(1, Math.min(100, limit)),
   });

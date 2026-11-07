@@ -13,6 +13,7 @@ import {
   fetchProductCreateOptions,
   fetchProductById,
   fetchProductsPage,
+  regenerateProductItemCode,
   updateProduct,
   type ProductListStatus,
   type ProductCodePrefix,
@@ -223,6 +224,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const [priceGroups, setPriceGroups] = useState<ProductPriceGroup[]>([]);
   const [priceGroupAmounts, setPriceGroupAmounts] = useState<Record<string, number>>({});
   const [productCodePrefix, setProductCodePrefix] = useState('');
+  const [regenerateItemCodePrefix, setRegenerateItemCodePrefix] = useState('');
+  const [isRegeneratingItemCode, setIsRegeneratingItemCode] = useState(false);
   const [newProductCodePrefix, setNewProductCodePrefix] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -235,6 +238,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const [highlightedProductId, setHighlightedProductId] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<ProductDetailTab>(() => productDetailTab(initialDetailTab));
   const productRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const editingProductIdRef = useRef<string | null>(null);
   const listViewportRef = useRef<HTMLDivElement | null>(null);
   const loadingRef = useRef(false);
   const requestSequenceRef = useRef(0);
@@ -334,6 +338,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     if (!initialProductId) return;
     void fetchProductById(initialProductId).then((product) => {
       if (!product) return;
+      editingProductIdRef.current = product.id;
       setEditingProduct(product);
       setFormData({ ...product, supplier_costs: product.supplier_costs || [] });
       setHighlightedProductId(product.id);
@@ -343,6 +348,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
 
   useEffect(() => {
     if (!initialCreate || initialProductId) return;
+    editingProductIdRef.current = null;
     setEditingProduct(null);
     setFormData({
       ...EMPTY_PRODUCT,
@@ -353,6 +359,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
       reorder_quantity: fromSuggestedStock ? Math.max(1, Number(EMPTY_PRODUCT.reorder_quantity) || 1) : 0,
     });
     setProductCodePrefix('');
+    setRegenerateItemCodePrefix('');
     setNewProductCodePrefix('');
     setNewProductCategory('');
     setPriceGroupAmounts(Object.fromEntries(priceGroups.map((group) => [group.name, 0])));
@@ -384,8 +391,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   );
 
   const selectProduct = (product: Product) => {
+    editingProductIdRef.current = product.id;
     setEditingProduct(product);
     setFormData({ ...product, supplier_costs: product.supplier_costs || [] });
+    setRegenerateItemCodePrefix('');
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
     setSubmitError('');
@@ -395,8 +404,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const clearEditor = () => {
+    editingProductIdRef.current = null;
     setEditingProduct(null);
     setFormData({ ...EMPTY_PRODUCT, supplier_costs: [] });
+    setRegenerateItemCodePrefix('');
     setProductCodePrefix('');
     setNewProductCodePrefix('');
     setNewProductCategory('');
@@ -407,6 +418,45 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     setValidationErrors({});
     setHighlightedProductId(null);
     setDetailTab('details');
+  };
+
+  const handleRegenerateItemCode = async (prefix: string) => {
+    if (!editingProduct || !prefix || !canEdit || isRegeneratingItemCode) return;
+    setRegenerateItemCodePrefix(prefix);
+    setIsRegeneratingItemCode(true);
+    setSubmitError('');
+    try {
+      const regenerated = await regenerateProductItemCode(editingProduct.id, prefix);
+      if (!regenerated.item_code) throw new Error('The server did not return the generated item code.');
+      setProducts((current) => current.map((product) => product.id === editingProduct.id
+        ? { ...product, item_code: regenerated.item_code }
+        : product));
+      if (editingProductIdRef.current === editingProduct.id) {
+        setFormData((current) => ({ ...current, item_code: regenerated.item_code }));
+        setEditingProduct((current) => current?.id === editingProduct.id
+          ? { ...current, item_code: regenerated.item_code }
+          : current);
+        setRegenerateItemCodePrefix('');
+      }
+      addToast({
+        type: 'success',
+        title: 'Item code regenerated',
+        description: `The product now uses ${regenerated.item_code}.`,
+      });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) {
+        if (editingProductIdRef.current === editingProduct.id) setRegenerateItemCodePrefix('');
+        return;
+      }
+      const message = parseSupabaseError(error, 'product');
+      if (editingProductIdRef.current === editingProduct.id) {
+        setRegenerateItemCodePrefix('');
+        setSubmitError(message);
+      }
+      addToast({ type: 'error', title: 'Unable to regenerate item code', description: message, durationMs: 6000 });
+    } finally {
+      setIsRegeneratingItemCode(false);
+    }
   };
 
   const validateForm = (mode: 'add' | 'edit') => {
@@ -662,7 +712,50 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             {detailTab === 'details' && <div className="grid grid-cols-1 gap-x-5 gap-y-3 lg:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Part No.">{fieldInput('part_no', 'Input Part Number')}</LegacyField>
               <LegacyField label="Item Code">
-                {editingProduct ? fieldInput('item_code', 'Item Code') : (
+                {editingProduct ? (String(formData.item_code || '').trim() === '' ? (
+                  <div className="space-y-1">
+                    <select
+                      aria-label="New item code prefix"
+                      value={regenerateItemCodePrefix}
+                      disabled={!canEdit || isRegeneratingItemCode}
+                      onChange={(event) => void handleRegenerateItemCode(event.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Select Item Code Prefix</option>
+                      {productCodePrefixes.map((prefix) => <option key={prefix.id} value={prefix.name}>{prefix.name}</option>)}
+                    </select>
+                    {isRegeneratingItemCode
+                      ? <span role="status" className="block text-xs text-slate-500">Generating and saving the next item code…</span>
+                      : <span className="block text-xs text-slate-500">Choose a prefix to generate and save the next item code.</span>}
+                    {editingProduct.item_code && (
+                      <button
+                        type="button"
+                        disabled={isRegeneratingItemCode}
+                        onClick={() => {
+                          setFormData((current) => ({ ...current, item_code: editingProduct.item_code }));
+                          setRegenerateItemCodePrefix('');
+                          setSubmitError('');
+                        }}
+                        className="text-xs font-medium text-[#315574] underline disabled:opacity-50"
+                      >Keep current code</button>
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={String(formData.item_code || '')}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      updateField('item_code', value);
+                      if (value.trim() === '') {
+                        setRegenerateItemCodePrefix('');
+                        setSubmitError('');
+                      }
+                    }}
+                    placeholder="Item Code"
+                    className={inputClass}
+                  />
+                )) : (
                   <div className="space-y-1">
                     <select
                       value={productCodePrefix}

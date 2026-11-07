@@ -1818,7 +1818,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             <div className="mt-[24px] overflow-x-auto">
               <table className="w-full min-w-[980px] border-collapse text-[12px]">
                 <thead><tr className="border-b-2 border-[#d5d5d5] text-center text-[14px] font-semibold">
-                  <th className="w-[70px] px-2 pb-2">Qty.</th><th className="w-[140px] px-2 pb-2">Part No.</th><th className="w-[140px] px-2 pb-2">Item Code</th><th className="w-[120px] px-2 pb-2">Location</th><th className="w-[120px] px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="w-[105px] px-2 pb-2">Unit price</th><th className="w-[105px] px-2 pb-2">Amount</th><th className="w-[120px] px-2 pb-2">Remark</th><th className="w-[175px] px-2 pb-2">Actions</th>
+                  <th className="w-[70px] px-2 pb-2">Qty.</th><th className="w-[140px] px-2 pb-2">Part No.</th><th className="w-[140px] px-2 pb-2">Item Code</th><th className="w-[120px] px-2 pb-2">Location</th><th className="w-[120px] px-2 pb-2">Brand</th><th className="px-2 pb-2">Description</th><th className="w-[105px] px-2 pb-2">Unit price</th><th className="w-[105px] px-2 pb-2">Amount</th><th className="w-[175px] px-2 pb-2">Actions</th>
                 </tr></thead>
                 <tbody>{items.map((item) => <tr key={item.tempId} className="border-b border-[#e1e1e1]">
                   <td className="px-1 py-2"><input type="number" min="1" disabled={isReadOnly} value={item.qty} onChange={(event) => updateItemRow(item.tempId, 'qty', event.target.value === '' ? '' : Number(event.target.value))} className="w-full border border-[#ccc] px-1 py-1 text-center" /></td>
@@ -1829,7 +1829,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   <td className="px-2 py-2">{!item.item_id && !isManualItem(item) ? <button type="button" onClick={() => handleOpenProductModal(item.tempId!)} className="text-[#337ab7] underline">Click to search product</button> : isManualItem(item) ? <input value={item.description || ''} onChange={(event) => updateItemRow(item.tempId, 'description', event.target.value.toUpperCase())} className="w-full border border-[#ccc] px-1 py-1" /> : item.description || ''}</td>
                   <td className="px-2 py-2 text-right"><input type="number" readOnly={!canEditItemUnitPrice(item)} value={item.unit_price} onChange={(event) => updateItemRow(item.tempId, 'unit_price', Number(event.target.value))} className="w-full border border-[#ccc] bg-white px-1 py-1 text-right read-only:bg-[#f5f5f5]" aria-label={`Unit price for ${item.part_no || item.item_code || 'item'}`} /></td>
                   <td className="px-2 py-2 text-right">{Number(item.amount || 0).toFixed(2)}</td>
-                  <td className={`px-2 py-2 text-center ${remarkClassName(item.remark)}`}>{item.remark || ''}</td>
                   <td className="px-2 py-2 text-center"><div className="flex flex-wrap items-center justify-center gap-2">
                     {canExportInquiryItemImages && item.item_id && !isManualItem(item) && <InquiryItemImageExportButton productId={item.item_id} productLabel={item.description || item.part_no || item.item_code || 'product'} />}
                     <button type="button" onClick={() => removeItemRow(item.tempId)} disabled={isReadOnly} className="text-[#c84848] underline disabled:opacity-40">Remove</button>
@@ -1841,12 +1840,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     <td className="px-2 py-3">
                       <span data-jpeg-export-plain-value className="inline-flex min-h-[24px] items-center rounded-full bg-[#6f91af] px-3 py-1 font-bold leading-tight text-white">{grandTotal.toFixed(2)}</span>
                     </td>
-                    <td colSpan={2}></td>
+                    <td colSpan={1}></td>
                   </tr>
                   <VipDocumentTotals
                     discount={vipDiscount}
                     formatMoney={(value) => value.toFixed(2)}
-                    grandTotalColSpan={9}
+                    grandTotalColSpan={8}
                   />
                 </tfoot>
               </table>

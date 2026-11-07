@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createProduct, fetchProductCreateOptions, fetchProductsPage, searchProducts, searchSalesInquiryProducts, updateProduct } from '../productLocalApiService';
+import { createProduct, fetchProductCreateOptions, fetchProductsPage, regenerateProductItemCode, searchProducts, searchSalesInquiryProducts, updateProduct } from '../productLocalApiService';
 
 const okResponse = (data: unknown) =>
   Promise.resolve({
@@ -195,6 +195,20 @@ describe('productLocalApiService', () => {
       part_no: 'QK-NEW-001',
       replenish_quantity: 0,
     });
+  });
+
+  it('regenerates an existing product item code through the authorized product route', async () => {
+    (global.fetch as any).mockImplementation(() => okResponse({ item_code: 'QK-123', product_code_prefix: 'QK-' }));
+
+    await expect(regenerateProductItemCode('product/1', 'QK-')).resolves.toEqual({
+      item_code: 'QK-123',
+      product_code_prefix: 'QK-',
+    });
+
+    const [url, init] = (global.fetch as any).mock.calls[0];
+    expect(String(url)).toContain('/products/product%2F1/regenerate-item-code');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toMatchObject({ product_code_prefix: 'QK-' });
   });
 
   it('sends product images using the legacy API field names on create and edit', async () => {
