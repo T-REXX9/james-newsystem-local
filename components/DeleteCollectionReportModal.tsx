@@ -74,6 +74,10 @@ const DeleteCollectionReportModal: React.FC<DeleteCollectionReportModalProps> = 
                                 <span className="w-1.5 h-1.5 bg-red-500 rounded-full flex-shrink-0" />
                                 All payment entries ({itemCount} {itemCount === 1 ? 'record' : 'records'})
                             </li>
+                            <li className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full flex-shrink-0" />
+                                All ledger entries linked to this DCR
+                            </li>
                         </ul>
                     </div>
 

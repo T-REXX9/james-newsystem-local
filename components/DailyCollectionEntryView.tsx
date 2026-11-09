@@ -1002,7 +1002,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
           Approver Logs
         </button>,
       );
-      if (status === 'Pending' && canDelete) {
+      if (canDelete) {
         secondary.push(
           <button
             key="delete-report"
@@ -1275,7 +1275,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                       >
                         Delete Selected
                       </button>}
-                      {canPost && selectedHeader?.lstatus === 'Posted' && <button
+                      {canPost && <button
                         className={`${BUTTON_SUCCESS} disabled:opacity-50 disabled:cursor-not-allowed`}
                         onClick={handlePostSelectedItems}
                         disabled={selectedItemIds.length === 0 || !!workingAction}
@@ -1377,7 +1377,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
                             className={`${isEditing ? 'bg-[#edf4f9]' : index % 2 === 0 ? 'bg-white' : 'bg-[#f8fafc]'} transition-colors hover:bg-[#f1f6fa]`}
                           >
                             <td className="px-2 py-2">
-                              {canDelete && deletable && (
+                              {((canDelete && deletable) || (canPost && !posted)) && (
                                 <input
                                   type="checkbox"
                                   className="accent-brand-blue"
@@ -1805,7 +1805,7 @@ const DailyCollectionEntryView: React.FC<{ initialCollectionRefNo?: string }> = 
           isOpen={showDeleteReportModal}
           onClose={() => setShowDeleteReportModal(false)}
           onConfirm={handleDeleteCollectionReport}
-          refNo={selectedRefno}
+          refNo={selectedHeader?.lcolection_no || selectedRefno}
           itemCount={items.length}
         />
         <ConfirmModal

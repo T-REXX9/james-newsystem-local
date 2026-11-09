@@ -26,6 +26,8 @@ vi.mock('../../services/dailyCollectionService', async () => {
       getCustomers: vi.fn(),
       getUnpaidTransactions: vi.fn(),
       addPayment: vi.fn(),
+      postItems: vi.fn(),
+      deleteCollection: vi.fn(),
       updateItem: vi.fn(),
     },
   };
@@ -94,6 +96,8 @@ describe('DailyCollectionEntryView scrolling', () => {
     vi.mocked(dailyCollectionService.getCustomers).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.getUnpaidTransactions).mockResolvedValue([]);
     vi.mocked(dailyCollectionService.addPayment).mockResolvedValue();
+    vi.mocked(dailyCollectionService.postItems).mockResolvedValue();
+    vi.mocked(dailyCollectionService.deleteCollection).mockResolvedValue();
     vi.mocked(dailyCollectionService.updateItem).mockResolvedValue(null);
   });
 
@@ -104,6 +108,125 @@ describe('DailyCollectionEntryView scrolling', () => {
     expect(screen.getByText('Agent / Account')).toBeInTheDocument();
     expect(screen.getAllByText('staff-1').length).toBeGreaterThan(0);
     expect(screen.getByText('Daily Collection Entry')).toBeInTheDocument();
+  });
+
+  it('shows payment-line selection and allows posting for a DCR that is not yet posted', async () => {
+    localAuthState.session = {
+      userProfile: {
+        id: 'staff-1',
+        role: 'Staff',
+        action_permissions: {
+          global: { can_post: true },
+          pages: { 'Daily Collection Entry': { can_post: true } },
+        },
+      },
+      context: { permissions: { web: [] } },
+    };
+
+    render(<DailyCollectionEntryView />);
+    await screen.findByText('Customer 1');
+
+    const row = screen.getByText('Customer 1').closest('tr');
+    expect(row).toBeTruthy();
+    fireEvent.click(within(row as HTMLElement).getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Post Selected' }));
+
+    await waitFor(() => {
+      expect(dailyCollectionService.postItems).toHaveBeenCalledWith('REF-1', [1]);
+    });
+  });
+
+  it('allows posting an eligible customer line when the DCR header is already Posted', async () => {
+    Object.assign(localAuthState.session.userProfile, {
+      action_permissions: {
+        global: { can_post: true },
+        pages: { 'Daily Collection Entry': { can_post: true } },
+      },
+    });
+    vi.mocked(dailyCollectionService.listCollections).mockResolvedValue([{
+      lrefno: 'REF-POSTED',
+      lcolection_no: 'DCR-POSTED',
+      lstatus: 'Posted',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    }]);
+    vi.mocked(dailyCollectionService.getCollection).mockResolvedValue({
+      lrefno: 'REF-POSTED',
+      lcolection_no: 'DCR-POSTED',
+      lstatus: 'Posted',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    });
+    vi.mocked(dailyCollectionService.getCollectionItems).mockResolvedValue([{
+      lid: 12,
+      lrefno: 'REF-POSTED',
+      lcustomer: 'customer-12',
+      lcustomer_fname: 'Eligible Customer',
+      lcustomer_lname: '',
+      ltype: 'Cash',
+      lbank: '',
+      lchk_no: '',
+      lchk_date: '',
+      lamt: 100,
+      lstatus: 'Pending',
+      lremarks: '',
+      lcollect_date: '2026-08-04',
+      lpost: 0,
+      lcollection_status: 'Pending',
+      ltransaction_no: 'INV-12',
+      created_at: '2026-08-04T00:00:00Z',
+    }]);
+
+    render(<DailyCollectionEntryView />);
+    const row = (await screen.findByText('Eligible Customer')).closest('tr');
+    expect(row).toBeTruthy();
+    fireEvent.click(within(row as HTMLElement).getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Post Selected' }));
+
+    await waitFor(() => {
+      expect(dailyCollectionService.postItems).toHaveBeenCalledWith('REF-POSTED', [12]);
+    });
+  });
+
+  it('allows deleting a posted DCR after confirming the permanent whole-report deletion', async () => {
+    Object.assign(localAuthState.session.userProfile, {
+        action_permissions: {
+          global: { can_delete: true },
+          pages: { 'Daily Collection Entry': { can_delete: true } },
+        },
+    });
+    vi.mocked(dailyCollectionService.listCollections).mockResolvedValue([{
+      lrefno: 'REF-POSTED',
+      lcolection_no: 'DCR-POSTED',
+      lstatus: 'Posted',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    }]);
+    vi.mocked(dailyCollectionService.getCollection).mockResolvedValueOnce({
+      lrefno: 'REF-POSTED',
+      lcolection_no: 'DCR-POSTED',
+      lstatus: 'Posted',
+      ldatetime: '2026-08-04',
+      total_amt: 465,
+      created_by: 'staff-1',
+      approved_by: 'staff-2',
+    });
+
+    render(<DailyCollectionEntryView />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Collection Report' }));
+    expect((await screen.findAllByText('DCR-POSTED')).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/all associated data cannot be recovered/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }));
+
+    await waitFor(() => {
+      expect(dailyCollectionService.deleteCollection).toHaveBeenCalledWith('REF-POSTED');
+    });
   });
 
   it('protects the collection date without Backdated posting while keeping check dates editable', async () => {
@@ -188,8 +311,6 @@ describe('DailyCollectionEntryView scrolling', () => {
       .find((input) => input !== collectionDateInput);
     expect(checkDateInput).toBeTruthy();
     fireEvent.change(checkDateInput as HTMLInputElement, { target: { value: '2027-03-15' } });
-    expect(screen.queryByRole('button', { name: 'Post Selected' })).not.toBeInTheDocument();
-
     const customerInput = await screen.findByPlaceholderText('Search customer');
     fireEvent.change(customerInput, { target: { value: 'Backdated Customer' } });
     fireEvent.click(await screen.findByText((_, element) => (
@@ -209,30 +330,6 @@ describe('DailyCollectionEntryView scrolling', () => {
         }),
       );
     });
-  });
-
-  it('only offers payment-line posting after the DCR header is posted', async () => {
-    vi.mocked(dailyCollectionService.getCollection).mockResolvedValue({
-      lrefno: 'REF-1',
-      lcolection_no: 'DCR-1',
-      lstatus: 'Posted',
-      ldatetime: '2024-01-04',
-      total_amt: 100,
-      created_by: 'staff-1',
-    });
-    vi.mocked(dailyCollectionService.listCollections).mockResolvedValueOnce([{
-      lrefno: 'REF-1',
-      lcolection_no: 'DCR-1',
-      lstatus: 'Posted',
-      ldatetime: '2024-01-04',
-      total_amt: 100,
-      created_by: 'staff-1',
-    }]);
-
-    render(<DailyCollectionEntryView />);
-    fireEvent.click((await screen.findAllByText('DCR-1'))[0]);
-
-    expect(await screen.findByRole('button', { name: 'Post Selected' })).toBeInTheDocument();
   });
 
   it('lets a user with Edit permission correct an unposted payment line', async () => {
