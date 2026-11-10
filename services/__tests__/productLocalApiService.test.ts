@@ -160,12 +160,12 @@ describe('productLocalApiService', () => {
 
   it('loads legacy item-code prefixes and configured price groups for product creation', async () => {
     (global.fetch as any).mockImplementation(() => okResponse({
-      code_prefixes: [{ id: '12', name: 'QK-' }],
+      code_prefixes: [{ id: '12', name: 'QK-', next_item_code: 'QK-123' }],
       price_groups: [{ name: 'AAA', type: 'Regular' }],
     }));
 
     await expect(fetchProductCreateOptions()).resolves.toEqual({
-      codePrefixes: [{ id: 12, name: 'QK-' }],
+      codePrefixes: [{ id: 12, name: 'QK-', nextItemCode: 'QK-123' }],
       priceGroups: [{ name: 'AAA', type: 'Regular' }],
     });
 

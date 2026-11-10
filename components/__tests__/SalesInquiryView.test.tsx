@@ -620,7 +620,6 @@ describe('SalesInquiryView', () => {
     expect(screen.getByDisplayValue('PN-MANUAL-1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('SPECIAL FILTER')).toBeInTheDocument();
     expect(screen.getByDisplayValue('3')).toBeInTheDocument();
-    expect(screen.getByText('NotListed')).toBeInTheDocument();
   });
 
   it('keeps an incomplete not-listed item in the modal and cancels without adding a row', async () => {

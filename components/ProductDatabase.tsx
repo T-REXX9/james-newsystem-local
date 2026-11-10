@@ -641,6 +641,7 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const activeFilterLabels = Object.entries(appliedFilters)
     .filter(([, value]) => value.trim())
     .map(([key, value]) => `${key.replace(/([A-Z])/g, ' $1')}: ${value}`);
+  const selectedProductCodePrefix = productCodePrefixes.find((prefix) => prefix.name === productCodePrefix);
 
   if (isLoading && !hasLoadedOnce) {
     return (
@@ -776,6 +777,13 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       />
                     )}
                     {!productCodePrefix && <span className="block text-xs text-slate-500">A number is added automatically when the product is saved.</span>}
+                    {productCodePrefix && (
+                      <span className="block text-xs text-slate-500">
+                        {productCodePrefix === ADD_PRODUCT_CODE_PREFIX
+                          ? 'The next number is assigned when the product is saved.'
+                          : `Next item code: ${selectedProductCodePrefix?.nextItemCode || `${productCodePrefix}1`}`}
+                      </span>
+                    )}
                   </div>
                 )}
               </LegacyField>

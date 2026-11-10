@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DailyCallMasterListView from '../DailyCallMasterListView';
+import { CustomerStarProvider } from '../CustomerStarIndicator';
+import { fetchCustomerIdentifiers } from '../../services/customerIdentifierService';
 import { fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
 import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, invalidateDailyCallMasterListCache, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, updateContact, fetchSalesAgents, fetchContactById, mapApiCustomerToContact, setCustomerStarred } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
+
+vi.mock('../../services/customerIdentifierService', () => ({ fetchCustomerIdentifiers: vi.fn() }));
 
 const masterUser: UserProfile = {
   id: 'master-1',
@@ -1089,9 +1093,11 @@ describe('DailyCallMasterListView', () => {
       }],
     });
 
-    render(<DailyCallMasterListView currentUser={masterUser} />);
+    vi.mocked(fetchCustomerIdentifiers).mockResolvedValue(new Map([['priority-1', ['Do Not Call']]]));
+    render(<CustomerStarProvider><DailyCallMasterListView currentUser={masterUser} /></CustomerStarProvider>);
 
-    expect(await screen.findByRole('status', { name: 'Priority Buyer Shop Do Not Call' })).toHaveTextContent('Do Not Call');
+    expect(await screen.findByRole('status', { name: 'Do Not Call' })).toHaveTextContent('Do Not Call');
+    expect(screen.getAllByRole('status', { name: 'Do Not Call' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Remove Priority Buyer Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
     expect(setDailyCallDoNotContactFlag).not.toHaveBeenCalled();
     expect(updateContact).not.toHaveBeenCalled();
@@ -1120,7 +1126,6 @@ describe('DailyCallMasterListView', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Call' }));
 
     expect(setDailyCallDoNotContactFlag).toHaveBeenCalledWith('priority-1', true, 'Not interested', 'Not interested');
-    expect(await screen.findByRole('status', { name: 'Priority Buyer Shop Do Not Call' })).toBeInTheDocument();
   });
 
   it('marks selected customers as Do Not Call in one request with a shared reason', async () => {
@@ -1164,7 +1169,6 @@ describe('DailyCallMasterListView', () => {
 
     expect(setDailyCallDoNotContactFlagsBulk).toHaveBeenCalledTimes(1);
     expect(setDailyCallDoNotContactFlagsBulk).toHaveBeenCalledWith(['priority-1'], 'Not interested', 'Not interested');
-    expect(await screen.findByRole('status', { name: 'Priority Buyer Shop Do Not Call' })).toBeInTheDocument();
   });
 
   it('clears a selection of individual customers with one action', async () => {
@@ -1537,7 +1541,6 @@ describe('DailyCallMasterListView', () => {
     expect(setDailyCallDoNotContactFlagsBulk).toHaveBeenCalledWith(['priority-1'], 'No longer operating', 'Other reasons');
     expect(updateContact).not.toHaveBeenCalled();
     expect(createCustomerLogForDailyCall).not.toHaveBeenCalled();
-    expect(screen.getByRole('status', { name: 'Priority Buyer Shop Do Not Call' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Remove Priority Buyer Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('category-table-priority')).toBeInTheDocument();
     expect(screen.getByText('Master User')).toBeInTheDocument();

@@ -115,10 +115,12 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     </div>
                     {requiredConfirmationText && (
                         <div>
-                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <label htmlFor="confirm-modal-confirmation" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                                 {confirmationInstruction || `Type ${requiredConfirmationText} to confirm`}
                             </label>
                             <input
+                                id="confirm-modal-confirmation"
+                                name="confirmationText"
                                 value={confirmationValue}
                                 onChange={(event) => setConfirmationValue(event.target.value)}
                                 disabled={isLoading}

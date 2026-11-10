@@ -348,7 +348,10 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
 
   const handleContactPersonChange = (index: number, field: keyof ContactPersonDraft, value: string) => {
       const newPersons = [...contactPersons];
-      newPersons[index] = { ...newPersons[index], [field]: value };
+      const fieldValue = field === 'name'
+        ? value.replace(/[0-9]/g, '').replace(/\s{2,}/g, ' ')
+        : value;
+      newPersons[index] = { ...newPersons[index], [field]: fieldValue };
       setContactPersons(newPersons);
   };
 
@@ -924,7 +927,14 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       {isEditMode ? (
                         <div>
                             <label className="label">Status</label>
-                            <select className="input" value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as CustomerStatus})}>
+                            <select aria-label="Status" className="input" value={formData.status} onChange={e => {
+                              const status = e.target.value as CustomerStatus;
+                              setFormData((current) => ({
+                                ...current,
+                                status,
+                                debtType: status === CustomerStatus.BLACKLISTED ? 'Bad' : 'Good',
+                              }));
+                            }}>
                                {editableStatusOptions.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                         </div>
@@ -942,7 +952,18 @@ const AddContactModal: React.FC<AddContactModalProps> = ({
                       )}
                       <div>
                           <label className="label">Debt Type</label>
-                          <select className="input" value={formData.debtType} onChange={e => setFormData({...formData, debtType: e.target.value as any})}>
+                          <select aria-label="Debt Type" className="input" value={formData.debtType} disabled={restrictProspectStatus} onChange={e => {
+                            const debtType = e.target.value as 'Good' | 'Bad';
+                            setFormData((current) => ({
+                              ...current,
+                              debtType,
+                              status: debtType === 'Bad'
+                                ? CustomerStatus.BLACKLISTED
+                                : current.status === CustomerStatus.BLACKLISTED
+                                  ? CustomerStatus.ACTIVE
+                                  : current.status,
+                            }));
+                          }}>
                              <option value="Good">Good</option>
                              <option value="Bad">Bad</option>
                           </select>

@@ -101,6 +101,78 @@ describe('AddContactModal Customer Since', () => {
     expect(onSubmit.mock.calls[0][0].customerSince).toBe('2019-05-24');
   });
 
+  it('does not allow numbers in a contact person name', async () => {
+    const user = userEvent.setup();
+    render(
+      <ToastProvider>
+        <AddContactModal
+          isOpen
+          onClose={() => undefined}
+          onSubmit={vi.fn(async (data: any) => ({ id: 'c-1', ...data }))}
+          mode="edit"
+          initialData={editContact({ contactPersons: [] })}
+        />
+      </ToastProvider>
+    );
+
+    const contactName = screen.getByPlaceholderText('Full Name');
+    await user.type(contactName, 'Maria 123 Santos');
+
+    expect(contactName).toHaveValue('Maria Santos');
+  });
+
+  it('keeps Debt Type and Status aligned so a Bad debt type is persisted', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async (data: any) => ({ id: 'c-1', ...data }));
+
+    render(
+      <ToastProvider>
+        <AddContactModal
+          isOpen
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+          mode="edit"
+          initialData={editContact({ status: CustomerStatus.ACTIVE, debtType: 'Good' })}
+        />
+      </ToastProvider>
+    );
+
+    await user.selectOptions(screen.getByLabelText('Debt Type'), 'Bad');
+    await user.click(screen.getByRole('button', { name: /update customer/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      status: CustomerStatus.BLACKLISTED,
+      debtType: 'Bad',
+    });
+  });
+
+  it('clears the Blacklisted status when Debt Type is changed back to Good', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(async (data: any) => ({ id: 'c-1', ...data }));
+
+    render(
+      <ToastProvider>
+        <AddContactModal
+          isOpen
+          onClose={() => undefined}
+          onSubmit={onSubmit}
+          mode="edit"
+          initialData={editContact({ status: CustomerStatus.BLACKLISTED, debtType: 'Bad' })}
+        />
+      </ToastProvider>
+    );
+
+    await user.selectOptions(screen.getByLabelText('Debt Type'), 'Good');
+    await user.click(screen.getByRole('button', { name: /update customer/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      status: CustomerStatus.ACTIVE,
+      debtType: 'Good',
+    });
+  });
+
   it('shows that the customer is already recorded and does not close', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(async () => {

@@ -21,6 +21,7 @@ import {
   validateDocumentDateWrite,
 } from '../../utils/backdatedPosting';
 import { formatDate, formatDateTime } from '../../utils/formatUtils';
+import { resolvePurchaseOrderEta } from '../../utils/procurementEta';
 
 import { shouldSuppressAuthError } from '../../services/localApiAuth';
 interface ReceivingViewProps {
@@ -282,7 +283,10 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const totalReceived = drafted.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
     const remainingQty = remainingQuantityAfterReceipt(drafted);
     const hasIncompleteDelivery = remainingQty > 0;
-    const etaDate = rr.eta_date || rr.po?.items?.find(item => item.eta_date)?.eta_date || null;
+    const etaDate = resolvePurchaseOrderEta(
+        rr.po?.order_date,
+        [rr.eta_date, ...(rr.po?.items || []).map((item) => item.eta_date)]
+    );
 
     return (
         <div className="w-full rounded-xl border border-slate-200 bg-white shadow-sm">

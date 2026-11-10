@@ -75,6 +75,9 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                        id="customer-search"
+                        name="customerSearch"
+                        aria-label="Search customers"
                         type="text"
                         value={searchQuery}
                         onChange={(e) => onSearchChange(e.target.value)}
@@ -86,6 +89,9 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                 <div className="flex gap-2">
                     <div className="relative flex-1">
                         <select
+                            id="customer-status-filter"
+                            name="customerStatusFilter"
+                            aria-label="Filter customers by status"
                             value={filterStatus}
                             onChange={(e) => onFilterStatusChange(e.target.value)}
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg pl-2 pr-6 py-1.5 text-xs focus:border-brand-blue outline-none appearance-none cursor-pointer"
@@ -159,7 +165,7 @@ const CustomerListSidebar: React.FC<CustomerListSidebarProps> = ({
                                                 name={customer.company}
                                                 pastName={customer.pastName}
                                                 entity={customer}
-                                                className={`font-semibold text-sm truncate pr-2 ${isSelected ? 'text-brand-blue' : 'text-slate-700 dark:text-slate-200'}`}
+                                                className={`font-semibold text-sm flex-wrap pr-2 ${isSelected ? 'text-brand-blue' : 'text-slate-700 dark:text-slate-200'}`}
                                             />
                                             </div>
                                             {customer.isHidden && <EyeOff className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />}

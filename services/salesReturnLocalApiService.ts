@@ -10,6 +10,9 @@ export interface SalesReturnRecord {
   linvoice_no: string;
   linvoice_refno: string;
   ldate: string;
+  ldaterec: string;
+  lmy_refno: string;
+  lsales_address: string;
   created_at: string;
   lstatus: string;
   ltype: string;
@@ -39,6 +42,7 @@ export interface SalesReturnItem {
   location: string;
   description: string;
   qty: number;
+  original_qty: number;
   unit_price: number;
   amount: number;
   remark: string;
@@ -139,6 +143,9 @@ export const mapSalesReturnRecord = (row: any): SalesReturnRecord => ({
   linvoice_no: String(row?.linvoice_no || ''),
   linvoice_refno: String(row?.linvoice_refno || ''),
   ldate: String(row?.ldate || ''),
+  ldaterec: String(row?.ldaterec || ''),
+  lmy_refno: String(row?.lmy_refno || ''),
+  lsales_address: String(row?.lsales_address || ''),
   created_at: String(row?.created_at || ''),
   lstatus: String(row?.lstatus || 'Pending'),
   ltype: String(row?.ltype || ''),
@@ -168,6 +175,7 @@ const mapItem = (row: any): SalesReturnItem => ({
   location: String(row?.location || ''),
   description: String(row?.description || ''),
   qty: toNumber(row?.qty),
+  original_qty: toNumber(row?.original_qty, toNumber(row?.qty)),
   unit_price: toNumber(row?.unit_price),
   amount: toNumber(row?.amount),
   remark: String(row?.remark || ''),

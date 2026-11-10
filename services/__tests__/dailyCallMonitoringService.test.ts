@@ -14,7 +14,9 @@ import {
   invalidateDailyCallMasterListCache,
   subscribeToDailyCallMonitoringUpdates,
   setDailyCallDoNotContactFlagsBulk,
+  setDailyCallDoNotContactFlag,
 } from '../dailyCallMonitoringService';
+import { CUSTOMER_IDENTIFIERS_UPDATED_EVENT } from '../../utils/customerStarEvents';
 
 describe('dailyCallMonitoringService', () => {
   beforeEach(() => {
@@ -27,6 +29,7 @@ describe('dailyCallMonitoringService', () => {
   });
 
   it('submits a shared allowed reason and all selected IDs to the bulk Blacklisted/Rejected endpoint', async () => {
+    const refreshSpy = vi.spyOn(window, 'dispatchEvent');
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({ data: { marked_count: 2 } }),
@@ -43,6 +46,20 @@ describe('dailyCallMonitoringService', () => {
       reason: 'Not interested',
       reason_option: 'Not interested',
     });
+    expect(refreshSpy).toHaveBeenCalledWith(expect.objectContaining({ type: CUSTOMER_IDENTIFIERS_UPDATED_EVENT }));
+  });
+
+  it('refreshes shared customer identifiers after changing a single Do Not Call flag', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { marked: true } }),
+    } as Response);
+    const refreshSpy = vi.spyOn(window, 'dispatchEvent');
+
+    await expect(setDailyCallDoNotContactFlag('customer-1', true, 'Not interested')).resolves.toBe(true);
+
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('/daily-call-monitoring/do-not-contact-flag');
+    expect(refreshSpy).toHaveBeenCalledWith(expect.objectContaining({ type: CUSTOMER_IDENTIFIERS_UPDATED_EVENT }));
   });
 
   it('submits custom bulk reasons with the Other reasons option', async () => {

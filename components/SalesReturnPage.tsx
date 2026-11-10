@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { Search, Plus, Trash2, FileText, Loader2 } from 'lucide-react';
+import { Search, Plus, Trash2, FileText, Loader2, Printer } from 'lucide-react';
 import ReactDOM from 'react-dom';
 import {
   SalesReturnItem,
@@ -21,6 +21,86 @@ import { shouldSuppressAuthError } from '../services/localApiAuth';
 type SourceDocument = SalesReturnSourceDocument;
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
+
+const formatLegacyCreditMemoDate = (value?: string): string => {
+  if (!value) return '';
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return '';
+  const monthLabel = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month - 1];
+  return `${String(day).padStart(2, '0')} ${monthLabel} ${String(year).slice(-2)}`;
+};
+
+export const SalesReturnPrintDocument: React.FC<{
+  record: SalesReturnRecord;
+  items: SalesReturnItem[];
+}> = ({ record, items }) => {
+  const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
+  const discountedSubtotal = Math.max(0, subtotal - record.ldiscount_amt);
+  const tax = record.ltax_type.trim().toLowerCase() === 'exclusive' ? discountedSubtotal * 0.12 : 0;
+  const total = discountedSubtotal + tax;
+
+  return (
+    <article id="sales-return-print-document" className="sales-return-print-document">
+      <style>{`.sales-return-print-document { display: none; }
+        @media print {
+          @page { size: 8.5in 6.5in; margin-top: 0.5cm; margin-left: 1cm; margin-right: 1cm; margin-bottom: 1cm; size: portrait; }
+          body * { visibility: hidden !important; }
+          #sales-return-print-document, #sales-return-print-document * { visibility: visible !important; }
+          #sales-return-print-document { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 0; background: #fff; color: #000; font: 10pt Tahoma, Verdana, Times, serif; }
+          .sales-return-print-heading { text-align: center; font: 17pt Tahoma, Verdana, Times, serif; color: #000; font-weight: 400; }
+          .sales-return-print-meta { display: table; width: 100%; margin: 8pt 0 14pt; }
+          .sales-return-print-meta-row { display: grid; grid-template-columns: 45% 10% 45%; min-height: 24pt; align-items: start; }
+          .sales-return-print-meta-cell { font: 12pt Tahoma, Verdana, Times, serif; text-transform: uppercase; }
+          .sales-return-print-meta-cell span { font: 12pt Tahoma, Verdana, Times, serif; text-decoration: underline; }
+          .sales-return-print-table, .sales-return-print-remarks { width: 100%; border-collapse: collapse; margin-top: 0; text-align: left; }
+          .sales-return-print-table th, .sales-return-print-table td, .sales-return-print-remarks th { border: 1px solid #110000; padding: 3px; color: #000; font-size: 10pt; }
+          .sales-return-print-table thead th { text-align: center; font-size: 12pt; }
+          .sales-return-print-total-label { text-align: right; }
+          .sales-return-print-remarks { margin-top: 10pt; }
+          .sales-return-print-remarks th { height: 34pt; text-align: left; vertical-align: top; }
+        }`}</style>
+      <header className="sales-return-print-heading">
+        <div>QBP ENTERPRISES INC.</div>
+        <div><u>CREDIT MEMO</u></div>
+      </header>
+      <section className="sales-return-print-meta">
+        <div className="sales-return-print-meta-row">
+          <div className="sales-return-print-meta-cell">Customer: <span>{record.customer_name}</span></div><div />
+          <div className="sales-return-print-meta-cell">CM No: <span>{record.lcredit_no}</span></div>
+        </div>
+        <div className="sales-return-print-meta-row">
+          <div className="sales-return-print-meta-cell">Address: <span>{record.lsales_address}</span></div><div />
+          <div className="sales-return-print-meta-cell">Date: <span>{formatLegacyCreditMemoDate(record.ldate)}</span></div>
+        </div>
+        <div className="sales-return-print-meta-row">
+          <div className="sales-return-print-meta-cell">Attn: <span>{record.lmy_refno}</span></div><div /><div />
+        </div>
+      </section>
+      <table className="sales-return-print-table">
+        <thead>
+          <tr><th width="2%" /><th colSpan={3} width="10%">QUANTITY</th><th /><th width="10%">INV/DR</th><th width="13%" /><th width="10%" /><th width="10%" /></tr>
+          <tr><th>NO.</th><th>ORD</th><th>RTN</th><th>SHORT</th><th>PARTICULAR</th><th>NO.</th><th>DATE</th><th>U/PRICE</th><th>AMOUNT</th></tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={item.id}>
+              <td>{index + 1}</td><td>{item.original_qty.toFixed(2)}</td><td>{item.qty.toFixed(2)}</td><td />
+              <td>{[item.part_no, item.description].filter(Boolean).join(' ') || item.item_code}</td>
+              <td>{record.linvoice_no || '—'}</td><td>{formatLegacyCreditMemoDate(record.ldaterec || record.ldate)}</td>
+              <td>{item.unit_price.toFixed(2)}</td><td>{item.amount.toFixed(2)}</td>
+            </tr>
+          ))}
+          {record.ltax_type.trim().toLowerCase() === 'exclusive' ? <>
+            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Total:</strong></td><td><strong>{discountedSubtotal.toFixed(2)}</strong></td></tr>
+            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Vat:</strong></td><td><strong>{tax.toFixed(2)}</strong></td></tr>
+            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Grand Total:</strong></td><td><strong>{total.toFixed(2)}</strong></td></tr>
+          </> : <tr><td colSpan={8} className="sales-return-print-total-label"><strong>TOTAL</strong></td><td><strong>{subtotal.toFixed(2)}</strong></td></tr>}
+        </tbody>
+      </table>
+      <table className="sales-return-print-remarks"><tbody><tr><th>Remarks: {record.internal_remarks || '—'}</th></tr></tbody></table>
+    </article>
+  );
+};
 
 export const calculateSalesReturnPostedAmount = (subtotal: number, discount: number, taxType: string): number =>
   Math.max(0, subtotal - discount) * (taxType.trim().toLowerCase() === 'exclusive' ? 1.12 : 1);
@@ -1103,6 +1183,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
   return (
     <div className="min-h-full bg-[#f4f4f4] px-4 py-10 text-[13px] text-[#222]">
       <div className="mx-auto max-w-[1140px] space-y-6">
+
         {showCreate ? (
           <CreateModal open onCreated={handleCreated} onClose={() => setShowCreate(false)} />
         ) : (
@@ -1166,6 +1247,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
               {selected && isPending && items.length > 0 && canPost && <button type="button" onClick={handlePost} disabled={actionLoading} className="rounded-[4px] bg-[#51b957] px-4 py-2 text-[12px] font-bold text-white">POST <u>Credit Memo</u></button>}
               {selected && isPosted && canUnpost && <button type="button" onClick={handleUnpost} disabled={actionLoading} className="rounded-[4px] bg-[#f0ad4e] px-4 py-2 text-[12px] font-bold text-white">UNPOST</button>}
               {selected && isPending && canDelete && <button type="button" onClick={handleDeleteSalesReturn} disabled={actionLoading} className="rounded-[4px] bg-[#d9534f] px-4 py-2 text-[12px] font-bold text-white">DELETE</button>}
+              {selected && <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-[4px] border border-[#5d82a2] px-3 py-2 text-[12px] font-bold text-[#315574] hover:bg-[#f3f7fa]" aria-label="Print sales return"><Printer className="h-4 w-4" />Print</button>}
               <span>CM No. :</span>
               <input readOnly value={selected?.lcredit_no || ''} className="h-[34px] w-[130px] rounded-[3px] border border-[#ccc] bg-[#eee] px-3 font-sans text-[13px]" />
             </div>
@@ -1322,6 +1404,10 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
           </div>
         </div>
       )}
+      {selected && <SalesReturnPrintDocument
+        record={selected}
+        items={items}
+      />}
     </div>
   );
 };

@@ -4,6 +4,10 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 
 import DailyCallMonitoringView from '../DailyCallMonitoringView';
+import { CustomerStarProvider } from '../CustomerStarIndicator';
+import { fetchCustomerIdentifiers } from '../../services/customerIdentifierService';
+
+vi.mock('../../services/customerIdentifierService', () => ({ fetchCustomerIdentifiers: vi.fn() }));
 
 const addToastMock = vi.fn();
 const fetchAgentSnapshotForDailyCallMock = vi.fn();
@@ -575,11 +579,12 @@ describe('DailyCallMonitoringView communication actions', () => {
       contacts: [{ ...baseSnapshot.contacts[0], status: 'active' }],
       masterList: [{ id: 'contact-1', shopName: 'Test Shop', listCategory: 'priority', purchaseCount: 1, doNotContact: true }],
     });
+    vi.mocked(fetchCustomerIdentifiers).mockResolvedValue(new Map([['contact-1', ['Do Not Call']]]));
 
-    render(<DailyCallMonitoringView currentUser={currentUser} />);
+    render(<CustomerStarProvider><DailyCallMonitoringView currentUser={currentUser} /></CustomerStarProvider>);
     await expandList('Recovery List', user);
     expect(screen.queryByRole('button', { name: 'Mark Test Shop Do Not Call' })).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Test Shop Do Not Call' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Do Not Call' })).toBeInTheDocument();
   });
 
   it('opens the reason dialog without opening the customer when the action is clicked', async () => {

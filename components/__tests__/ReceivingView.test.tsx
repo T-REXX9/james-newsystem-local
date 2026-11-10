@@ -61,6 +61,19 @@ describe('ReceivingView', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('shows ETA 30 days after the PO date when stored ETA is the 1970 sentinel', async () => {
+    service.getReceivingReportById.mockResolvedValue({
+      ...report,
+      eta_date: '1970-01-01',
+      po: { ...report.po, items: [{ ...report.po.items[0], eta_date: '1970-01-01' }] },
+    });
+    const { default: ReceivingView } = await import('../ReceivingStock/ReceivingView');
+    render(<ReceivingView rrId="RRREF-1" onBack={vi.fn()} onCreateNew={vi.fn()} />);
+
+    expect(await screen.findByText('AUG‑31‑26')).toBeInTheDocument();
+    expect(screen.queryByText('JAN‑01‑70')).not.toBeInTheDocument();
+  });
+
   it('posts incomplete delivery with partial reason without closing remaining PO qty', async () => {
     const { default: ReceivingView } = await import('../ReceivingStock/ReceivingView');
     render(<ReceivingView rrId="RRREF-1" onBack={vi.fn()} onCreateNew={vi.fn()} />);

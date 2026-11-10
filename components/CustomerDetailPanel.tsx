@@ -48,6 +48,14 @@ interface CustomerTermsRow {
 export const formatLastPurchaseForDisplay = (lastPurchaseDate: string | null | undefined): string =>
     lastPurchaseDate || 'Never';
 
+export const getPrimaryContactSummary = (contact: Contact): { name: string; number: string } => {
+    const primaryContact = contact.contactPersons?.find((person) => person.enabled !== false) || contact.contactPersons?.[0];
+    return {
+        name: primaryContact?.name || contact.name || 'No Contact Person',
+        number: primaryContact?.mobile || primaryContact?.telephone || contact.mobile || contact.phone || '',
+    };
+};
+
 // Transaction Icon Helper
 const getTransactionIcon = (type: string) => {
     switch (type) {
@@ -230,6 +238,7 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
         ? contact.company.substring(0, 2).toUpperCase()
         : contact.name ? contact.name.substring(0, 2).toUpperCase() : '??';
     const normalizedPriceGroup = contact.priceGroup ? normalizePriceGroup(contact.priceGroup) : '';
+    const primaryContactSummary = getPrimaryContactSummary(contact);
 
     return (
         <div className="min-h-full flex flex-col bg-slate-50 dark:bg-slate-950 overflow-visible animate-fadeIn">
@@ -262,7 +271,8 @@ const CustomerDetailPanel: React.FC<CustomerDetailPanelProps> = ({
                             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                                 <span className="flex items-center gap-1.5">
                                     <User className="w-3.5 h-3.5" />
-                                    {contact.contactPersons?.[0]?.name || contact.name || 'No Contact Person'}
+                                    {primaryContactSummary.name}
+                                    {primaryContactSummary.number && <span className="font-normal">@{primaryContactSummary.number}</span>}
                                 </span>
                                 <span className="w-1 h-1 bg-slate-300 rounded-full" />
                                 <span className="flex items-center gap-1.5">

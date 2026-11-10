@@ -176,6 +176,7 @@ export interface FetchProductsPageResult {
 export interface ProductCodePrefix {
   id: number;
   name: string;
+  nextItemCode: string;
 }
 
 export interface ProductPriceGroup {
@@ -193,7 +194,11 @@ export const fetchProductCreateOptions = async (): Promise<{ codePrefixes: Produ
   const codePrefixes = Array.isArray(data.code_prefixes) ? data.code_prefixes : [];
   const priceGroups = Array.isArray(data.price_groups) ? data.price_groups : [];
   return {
-    codePrefixes: codePrefixes.map((row: any) => ({ id: Number(row.id), name: String(row.name ?? '') })),
+    codePrefixes: codePrefixes.map((row: any) => ({
+      id: Number(row.id),
+      name: String(row.name ?? ''),
+      nextItemCode: String(row.next_item_code ?? ''),
+    })),
     priceGroups: priceGroups.map((row: any) => ({ name: String(row.name ?? ''), type: String(row.type ?? 'Regular') })),
   };
 };

@@ -2128,7 +2128,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                           ) : (
                             <CustomerStarIndicator customerId={row.id} isStarred={row.isStarred} className="ml-1 inline h-3.5 w-3.5" />
                           )}
-                          {row.doNotContact && <span role="status" aria-label={`${row.shopName} Do Not Call`} className="ml-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-red-800">Do Not Call</span>}
                           {row.isOverridden && <span role="status" aria-label={`${row.shopName} override to Recovery List`} title={row.overrideReason ? `Override reason: ${row.overrideReason}` : 'Priority List filtering overridden'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[9px] font-extrabold uppercase text-amber-900">Override</span>}
                           {row.dataIntegrityException && (
                             <p className="mt-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800" title={row.dataIntegrityMessage || 'Missing active customer record'}>
@@ -2204,10 +2203,10 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                             <>
                               <button
                                 type="button"
-                                onClick={() => void openCustomerDetails(row, 'sales-report')}
-                                aria-label={`Open ${row.shopName} customer profile and Agent Sales Report`}
+                                onClick={() => setReplyModalRow(row)}
+                                aria-label={`Reply to latest Agent Sales Report for ${row.shopName}`}
                                 className="block w-full whitespace-pre-wrap text-left text-slate-700 underline-offset-2 transition hover:text-blue-700 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                                title="Open customer profile and Agent Sales Report"
+                                title="Reply to latest Agent Sales Report"
                               >
                                 {row.latestSalesReportMessage}
                               </button>

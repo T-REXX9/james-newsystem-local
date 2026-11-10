@@ -25,6 +25,7 @@ import {
 import { formatDateFull } from '../utils/formatUtils';
 import { resolveDailyCallListCategory } from '../utils/dailyCallListCategory';
 import { getLocalAuthSession } from './localAuthService';
+import { CUSTOMER_IDENTIFIERS_UPDATED_EVENT } from '../utils/customerStarEvents';
 import { parseApiErrorMessage } from './localApiAuth';
 
 export interface DailyCallFilterParams {
@@ -602,7 +603,9 @@ export const setDailyCallDoNotContactFlag = async (contactId: string, marked: bo
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ main_id: resolveMainId(), contact_id: contactId, marked, reason, reason_option: reasonOption }),
   });
-  return Boolean(payload?.data?.marked);
+  const updated = Boolean(payload?.data?.marked);
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CUSTOMER_IDENTIFIERS_UPDATED_EVENT));
+  return updated;
 };
 
 export const setDailyCallDoNotContactFlagsBulk = async (contactIds: string[], reason: string, reasonOption = reason): Promise<number> => {
@@ -611,7 +614,9 @@ export const setDailyCallDoNotContactFlagsBulk = async (contactIds: string[], re
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ main_id: resolveMainId(), contact_ids: contactIds, reason, reason_option: reasonOption }),
   });
-  return Number(payload?.data?.marked_count ?? 0);
+  const markedCount = Number(payload?.data?.marked_count ?? 0);
+  if (markedCount > 0 && typeof window !== 'undefined') window.dispatchEvent(new Event(CUSTOMER_IDENTIFIERS_UPDATED_EVENT));
+  return markedCount;
 };
 
 const mapDailyCallDoNotContactCustomer = (row: any): DailyCallDoNotContactCustomer => ({

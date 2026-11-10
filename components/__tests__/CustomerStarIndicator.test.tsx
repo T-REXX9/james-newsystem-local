@@ -1,10 +1,10 @@
 import React from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomerStarIndicator, { CustomerStarProvider } from '../CustomerStarIndicator';
 import { fetchStarredCustomerIds } from '../../services/customerStarService';
 import { fetchCustomerIdentifiers } from '../../services/customerIdentifierService';
-import { CUSTOMER_STAR_UPDATED_EVENT } from '../../utils/customerStarEvents';
+import { CUSTOMER_IDENTIFIERS_UPDATED_EVENT, CUSTOMER_STAR_UPDATED_EVENT } from '../../utils/customerStarEvents';
 
 vi.mock('../../services/customerStarService', () => ({ fetchStarredCustomerIds: vi.fn() }));
 vi.mock('../../services/customerIdentifierService', () => ({ fetchCustomerIdentifiers: vi.fn() }));
@@ -34,9 +34,42 @@ describe('CustomerStarIndicator', () => {
     expect(await screen.findByLabelText('New Customer')).toBeInTheDocument();
     expect(screen.getByLabelText('Starred customer')).toBeInTheDocument();
   });
+  it('shows the shared Do Not Call identifier badge', async () => {
+    vi.mocked(fetchStarredCustomerIds).mockResolvedValue([]);
+    vi.mocked(fetchCustomerIdentifiers).mockResolvedValue(new Map([['customer-42', ['Do Not Call']]]));
+
+    render(
+      <CustomerStarProvider>
+        <CustomerStarIndicator customerId="customer-42" />
+      </CustomerStarProvider>,
+    );
+
+    await act(async () => {});
+    expect(await screen.findByRole('status', { name: 'Do Not Call' })).toHaveTextContent('Do Not Call');
+  });
 });
 
 describe('CustomerStarProvider', () => {
+  it('refreshes customer identifiers after an identifier update event', async () => {
+    vi.mocked(fetchStarredCustomerIds).mockResolvedValue([]);
+    vi.mocked(fetchCustomerIdentifiers)
+      .mockResolvedValueOnce(new Map())
+      .mockResolvedValueOnce(new Map([['customer-42', ['Do Not Call']]]));
+
+    render(
+      <CustomerStarProvider>
+        <CustomerStarIndicator customerId="customer-42" />
+      </CustomerStarProvider>,
+    );
+
+    await waitFor(() => expect(fetchCustomerIdentifiers).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      window.dispatchEvent(new Event(CUSTOMER_IDENTIFIERS_UPDATED_EVENT));
+    });
+
+    expect(await screen.findByRole('status', { name: 'Do Not Call' })).toBeInTheDocument();
+  });
+
   it('does not let an older refresh erase a newer star update', async () => {
     const olderRequest = deferred<string[]>();
     const newerRequest = deferred<string[]>();

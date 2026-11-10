@@ -115,7 +115,7 @@ describe('ProductDatabase', () => {
       },
     });
     fetchProductCreateOptionsMock.mockResolvedValue({
-      codePrefixes: [{ id: 10, name: 'QK-' }, { id: 11, name: 'FG' }],
+      codePrefixes: [{ id: 10, name: 'QK-', nextItemCode: 'QK-123' }, { id: 11, name: 'FG', nextItemCode: 'FG1' }],
       priceGroups: [],
     });
     createProductMock.mockResolvedValue(undefined);
@@ -133,6 +133,7 @@ describe('ProductDatabase', () => {
     expect(within(codeSelect).getByRole('option', { name: 'QK-' })).toHaveValue('QK-');
 
     fireEvent.change(codeSelect, { target: { value: 'QK-' } });
+    expect(screen.getByText('Next item code: QK-123')).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText('Input Part Number'), { target: { value: 'QK-TEST-001' } });
     fireEvent.change(screen.getByPlaceholderText('Input Description'), { target: { value: 'Running number test item' } });
     fireEvent.change(screen.getByPlaceholderText('Input Replenish Qty'), { target: { value: '7' } });
@@ -150,8 +151,8 @@ describe('ProductDatabase', () => {
 
   it('allows a new prefix to be entered and submits it as a new legacy code prefix', async () => {
     fetchProductCreateOptionsMock
-      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-' }], priceGroups: [] })
-      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-' }, { id: 12, name: 'NEW-' }], priceGroups: [] });
+      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-', nextItemCode: 'QK-123' }], priceGroups: [] })
+      .mockResolvedValueOnce({ codePrefixes: [{ id: 10, name: 'QK-', nextItemCode: 'QK-123' }, { id: 12, name: 'NEW-', nextItemCode: 'NEW-1' }], priceGroups: [] });
     render(<ProductDatabase currentUser={{ id: 'owner-1', role: 'Owner' } as any} initialCreate />);
 
     fireEvent.change(await screen.findByDisplayValue('Select Item Code Prefix'), {

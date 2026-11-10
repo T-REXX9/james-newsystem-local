@@ -138,6 +138,78 @@ describe('customer database price and discount codes', () => {
     });
   });
 
+  it('maps every customer edit field to its persisted API column', () => {
+    const payload = mapContactUpdatesToApi({
+      company: 'Edited Company',
+      email: 'customer@example.com',
+      phone: '5550101',
+      mobile: '5550102',
+      customerSince: '2020-02-03',
+      assignedAgentId: 'agent-7',
+      __salesTeamId: 23,
+      referBy: 'Trade show',
+      address: '1 Main St',
+      province: 'Cebu',
+      city: 'Cebu City',
+      area: 'Central',
+      deliveryAddress: 'Warehouse A',
+      deliveryAddresses: ['Warehouse A', 'Branch B'],
+      tin: '123-456',
+      priceGroup: 'vip 2',
+      businessLine: 'Automotive',
+      terms: '30 days',
+      transactionType: 'Invoice',
+      vatType: 'VAT Registered',
+      vatPercentage: '12',
+      dealershipTerms: 'Minimum purchase',
+      dealershipSince: '2021-04-05',
+      dealershipQuota: 150000,
+      creditLimit: 250000,
+      preferredBrand: 'Ishinomoto',
+      status: CustomerStatus.ACTIVE,
+      isHidden: true,
+      debtType: 'Good',
+      comment: 'Edited note',
+      recordImage: 'https://example.com/customer.png',
+      recordImagePosition: '25,75',
+    });
+
+    expect(payload).toEqual({
+      company: 'Edited Company',
+      email: 'customer@example.com',
+      phone: '5550101',
+      mobile: '5550102',
+      sales_person_id: 'agent-7',
+      sales_team_id: 23,
+      refer_by: 'Trade show',
+      address: '1 Main St',
+      province: 'Cebu',
+      city: 'Cebu City',
+      area: 'Central',
+      delivery_address: 'Warehouse A',
+      delivery_addresses: ['Warehouse A', 'Branch B'],
+      tin: '123-456',
+      price_group: 'vip 2',
+      business_line: 'Automotive',
+      terms: '30 days',
+      transaction_type: 'Invoice',
+      vat_type: 'VAT Registered',
+      vat_percent: 0.12,
+      since: '2020-02-03',
+      dealer_since: '2021-04-05',
+      dealer_terms: 'Minimum purchase',
+      dealer_quota: 150000,
+      credit_limit: 250000,
+      preferred_brand: 'Ishinomoto',
+      status: 0,
+      profile_type: 'Old',
+      debt_type: 'Good',
+      notes: 'Edited note',
+      record_image: 'https://example.com/customer.png',
+      record_image_position: '25,75',
+    });
+  });
+
   it('maps the existing sales team ID for authorized edits', () => {
     const contact = mapApiCustomerToContact({
       session_id: 'cust-team',
@@ -188,6 +260,20 @@ describe('customer database saves and daily call cache', () => {
       expect.objectContaining({ url: expect.stringContaining('/customer-database/contacts/123'), method: 'PATCH' }),
       expect.objectContaining({ url: expect.stringContaining('/customer-database/prospect-1/contacts'), method: 'POST' }),
     ]);
+
+    const existingPersonPatch = fetchSpy.mock.calls.find(([url, init]) =>
+      String(url).includes('/customer-database/contacts/123') && (init as RequestInit)?.method === 'PATCH'
+    );
+    expect(JSON.parse(String(existingPersonPatch?.[1]?.body))).toMatchObject({
+      main_id: 1,
+      first_name: 'Updated',
+      last_name: 'Contact',
+      position: 'Buyer',
+      phone: '5551234',
+      mobile: '09123456789',
+      email: 'buyer@example.com',
+      birthday: '',
+    });
   });
 
   it('shows a Daily Call recovery buyer as Inactive in Customer Data', async () => {

@@ -3,7 +3,7 @@ import { Star } from 'lucide-react';
 import { fetchStarredCustomerIds } from '../services/customerStarService';
 import { fetchCustomerIdentifiers } from '../services/customerIdentifierService';
 import type { CustomerIdentifier } from '../services/customerIdentifierService';
-import { CUSTOMER_STAR_UPDATED_EVENT } from '../utils/customerStarEvents';
+import { CUSTOMER_IDENTIFIERS_UPDATED_EVENT, CUSTOMER_STAR_UPDATED_EVENT } from '../utils/customerStarEvents';
 import type { CustomerStarUpdatedDetail } from '../utils/customerStarEvents';
 
 const CustomerStarContext = createContext<Set<string> | null>(null);
@@ -56,12 +56,14 @@ export const CustomerStarProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
     const handleWindowFocus = () => refreshIdentifiers();
     window.addEventListener(CUSTOMER_STAR_UPDATED_EVENT, handleStarUpdate);
+    window.addEventListener(CUSTOMER_IDENTIFIERS_UPDATED_EVENT, refreshIdentifiers);
     window.addEventListener('focus', handleWindowFocus);
     return () => {
       mounted = false;
       latestRefreshId.current += 1;
       latestIdentifierRefreshId.current += 1;
       window.removeEventListener(CUSTOMER_STAR_UPDATED_EVENT, handleStarUpdate);
+      window.removeEventListener(CUSTOMER_IDENTIFIERS_UPDATED_EVENT, refreshIdentifiers);
       window.removeEventListener('focus', handleWindowFocus);
     };
   }, []);

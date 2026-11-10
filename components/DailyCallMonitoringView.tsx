@@ -2608,7 +2608,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                   <span className="text-[11px] font-extrabold text-slate-400">{index + 1}</span>
                                   <span className="min-w-0">
                                     <span className="block truncate text-[11px] font-extrabold uppercase leading-tight text-[#10244c] dark:text-white" title={row.contact.company}>{row.contact.company}</span>
-                                    {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-1 text-[9px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
+                                    <CustomerStarIndicator customerId={row.contact.id} isStarred={row.contact.isStarred} showStar={false} />
                                     <span className="mt-0.5 block truncate text-[10px] font-semibold text-slate-600 dark:text-slate-300">Assigned to {row.contact.salesman || 'Unassigned'}{row.contact.team ? ` · ${row.contact.team}` : ''}</span>
                                     <span className="mt-1 inline-flex rounded bg-red-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-red-800 dark:bg-red-900/50 dark:text-red-200">Blacklisted/Rejected</span>
                                   </span>
@@ -2654,7 +2654,6 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
-                                {masterListRows.find(item => item.id === row.contact.id)?.doNotContact && <span role="status" aria-label={`${row.contact.company} Do Not Call`} className="mt-1 block w-fit rounded bg-red-100 px-1 py-0.5 text-[8px] font-extrabold uppercase leading-tight text-red-800">Do Not Call</span>}
                                 {row.contact.team && (
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
                                     Team: {row.contact.team}
