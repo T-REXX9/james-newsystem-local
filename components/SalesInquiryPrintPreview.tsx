@@ -480,7 +480,6 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 <th>Part No</th>
                 <th>Description</th>
                 <th>Unit Price</th>
-                <th>Remark</th>
                 <th style={{ textAlign: 'center' }}>Amount</th>
               </tr>
             </thead>
@@ -497,13 +496,12 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                     <td>{item.part_no || '-'}</td>
                     <td>{item.description || '-'}</td>
                     <td className="price">{formatMoney(Number(item.unit_price || 0))}</td>
-                    <td>{item.remark || '-'}</td>
                     <td className="amount"><strong>{formatMoney(lineTotal)}</strong></td>
                   </tr>
                 );
               })}
               <tr>
-                <td colSpan={9} style={{ textAlign: 'right' }}>
+                <td colSpan={8} style={{ textAlign: 'right' }}>
                   <strong>Grand Total</strong>
                 </td>
                 <td className="amount">
@@ -513,7 +511,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
               <VipDocumentTotals
                 discount={vipDiscount}
                 formatMoney={formatMoney}
-                grandTotalColSpan={9}
+                grandTotalColSpan={8}
                 amountClassName="amount"
               />
             </tbody>
