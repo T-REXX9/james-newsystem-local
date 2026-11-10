@@ -493,6 +493,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   const [savingDoNotCallId, setSavingDoNotCallId] = useState<string | null>(null);
   const [selectedDoNotCallIds, setSelectedDoNotCallIds] = useState<Set<string>>(() => new Set());
   const [showBulkDoNotCallModal, setShowBulkDoNotCallModal] = useState(false);
+  const [showBulkOverrideModal, setShowBulkOverrideModal] = useState(false);
+  const [bulkOverrideReason, setBulkOverrideReason] = useState('');
+  const [savingBulkOverride, setSavingBulkOverride] = useState(false);
   const [bulkDoNotCallReason, setBulkDoNotCallReason] = useState('');
   const [bulkDoNotCallReasonOption, setBulkDoNotCallReasonOption] = useState('');
   const [bulkDoNotCallCustomReason, setBulkDoNotCallCustomReason] = useState('');
@@ -749,6 +752,48 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       setSavingBulkDoNotCall(false);
     }
   }, [addToast, bulkDoNotCallCustomReason, bulkDoNotCallReasonOption, currentUser, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
+
+  const handleConfirmBulkOverride = useCallback(async () => {
+    const reason = bulkOverrideReason.trim();
+    const selectedRows = rows.filter((row) => selectedDoNotCallIds.has(row.id)
+      && !row.dataIntegrityException && !isBlockedDailyCallMasterRow(row));
+    if (!isMasterUserType(currentUser) || savingBulkOverride || !reason || selectedRows.length === 0) return;
+    setSavingBulkOverride(true);
+    try {
+      const results = await Promise.allSettled(selectedRows.map((row) =>
+        sendPriorityListOverrideSalesReportEntry(row.id, true, reason, currentUser)));
+      const succeededRows = selectedRows.filter((_, index) => results[index].status === 'fulfilled');
+      const failedCount = selectedRows.length - succeededRows.length;
+      const ids = new Set(succeededRows.map((row) => row.id));
+      if (ids.size === 0) throw new Error('No customer overrides were saved. Please try again.');
+      setRows((current) => current.map((row) => ids.has(row.id)
+        ? { ...row, isOverridden: true, overrideReason: reason }
+        : row));
+      setSelectedDoNotCallIds((current) => {
+        const next = new Set(current);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      if (failedCount === 0) {
+        setShowBulkOverrideModal(false);
+        setBulkOverrideReason('');
+      }
+      setActiveCategoryId('recovery');
+      setVisibleLimit(INITIAL_VISIBLE_ROWS);
+      invalidateDailyCallMasterListCache();
+      addToast({
+        type: failedCount ? 'warning' : 'success',
+        title: failedCount ? 'Some overrides could not be saved' : 'Moved to Recovery List',
+        description: failedCount
+          ? `${succeededRows.length} customers were moved; ${failedCount} failed and remain selected.`
+          : `${succeededRows.length} customers now have a Priority List override.`,
+      });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to override selected customers', description: getUserFacingErrorMessage(error, 'Please refresh and check the list before retrying.') });
+    } finally {
+      setSavingBulkOverride(false);
+    }
+  }, [addToast, bulkOverrideReason, currentUser, rows, savingBulkOverride, selectedDoNotCallIds]);
 
   const openCustomerDetails = useCallback(async (row: DailyCallMasterCustomerRow, initialTab: DetailTabId = 'overview') => {
     setDetailInitialTab(initialTab);
@@ -1953,6 +1998,12 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                     <UserX className="h-4 w-4" aria-hidden="true" />
                     Do Not Call
                   </button>}
+                  {selectedDoNotCallRows.some((row) => !isBlockedDailyCallMasterRow(row)) && isMasterUserType(currentUser) && <button
+                    type="button"
+                    onClick={() => { setBulkOverrideReason(''); setShowBulkOverrideModal(true); }}
+                    disabled={savingBulkOverride || savingBulkDoNotCall || savingBatchDoNotContact}
+                    className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >Override to Recovery List</button>}
                 </div>
               </div>
             )}
@@ -2548,6 +2599,30 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 disabled={!bulkDoNotCallReasonOption || (bulkDoNotCallReasonOption === 'Other reasons' && !bulkDoNotCallCustomReason.trim()) || savingBulkDoNotCall || selectedDoNotCallRows.length === 0}
                 className="rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >{savingBulkDoNotCall ? 'Saving…' : `Apply to ${selectedDoNotCallRows.length} customers`}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showBulkOverrideModal && isMasterUserType(currentUser) && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 py-6" role="presentation">
+          <form role="dialog" aria-modal="true" aria-labelledby="bulk-override-title"
+            className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => { event.preventDefault(); void handleConfirmBulkOverride(); }}>
+            <h2 id="bulk-override-title" className="text-base font-bold text-slate-950">Override {selectedDoNotCallRows.filter((row) => !isBlockedDailyCallMasterRow(row)).length} customers to Recovery List</h2>
+            <p className="mt-1 text-sm text-slate-600">This bypasses normal list filtering for each selected customer. A reason is required.</p>
+            <label className="mt-4 block text-xs font-semibold text-slate-700" htmlFor="bulk-override-reason">Shared override reason</label>
+            <textarea id="bulk-override-reason" aria-label="Shared override reason" value={bulkOverrideReason}
+              onChange={(event) => setBulkOverrideReason(event.target.value)} maxLength={2000} required rows={3}
+              disabled={savingBulkOverride}
+              className="mt-1 w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:opacity-60" />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => { setShowBulkOverrideModal(false); setBulkOverrideReason(''); }} disabled={savingBulkOverride}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="submit" disabled={!bulkOverrideReason.trim() || savingBulkOverride}
+                className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-bold text-white hover:bg-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50">
+                {savingBulkOverride ? 'Saving…' : `Move ${selectedDoNotCallRows.filter((row) => !isBlockedDailyCallMasterRow(row)).length} customers to Recovery List`}
+              </button>
             </div>
           </form>
         </div>
