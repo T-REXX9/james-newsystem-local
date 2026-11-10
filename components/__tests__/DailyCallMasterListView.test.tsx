@@ -1199,6 +1199,36 @@ describe('DailyCallMasterListView', () => {
     }));
   });
 
+  it('keeps failed customers selected when a bulk Recovery List override partially fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
+      meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 2 },
+      pendingDuplicateProspects: [],
+      items: ['priority-1', 'priority-2'].map((id, index) => ({
+        id, shopName: `Priority Shop ${index + 1}`, province: 'Manila', city: 'Manila',
+        contactNumber: '0930', assignedTo: 'Joan Jerusalem', purchaseCount: 1,
+        lastPurchaseDateRaw: '2026-06-01', listCategory: 'priority' as const,
+        totalSales: 1000, currentMonthSales: 0, averageMonthlySales: 0,
+        daysSinceLastPurchase: 20, monthsSinceLastPurchase: 0, purchaseAgeGroup: 'two_weeks_to_one_month' as const,
+      })),
+    });
+    vi.mocked(sendSalesReportMessage)
+      .mockResolvedValueOnce({} as never)
+      .mockRejectedValueOnce(new Error('Request failed'));
+    render(<DailyCallMasterListView currentUser={masterUser} />);
+    await user.click(await screen.findByRole('checkbox', { name: 'Select all customers in this list' }));
+    await user.click(screen.getByRole('button', { name: 'Override to Recovery List' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Override 2 customers to Recovery List' });
+    await user.type(within(dialog).getByRole('textbox', { name: 'Shared override reason' }), 'Account review');
+    await user.click(within(dialog).getByRole('button', { name: 'Move 2 customers to Recovery List' }));
+    await waitFor(() => expect(addToast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'warning',
+      title: 'Some overrides could not be saved',
+      description: '1 customers were moved; 1 failed and remain selected.',
+    })));
+    expect(screen.getByRole('dialog', { name: 'Override 1 customers to Recovery List' })).toBeInTheDocument();
+  });
+
   it('clears a selection of individual customers with one action', async () => {
     const user = userEvent.setup();
     const rows = Array.from({ length: 10 }, (_, index) => ({

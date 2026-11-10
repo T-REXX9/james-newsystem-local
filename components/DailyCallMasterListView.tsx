@@ -777,8 +777,8 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       if (failedCount === 0) {
         setShowBulkOverrideModal(false);
         setBulkOverrideReason('');
+        setActiveCategoryId('recovery');
       }
-      setActiveCategoryId('recovery');
       setVisibleLimit(INITIAL_VISIBLE_ROWS);
       invalidateDailyCallMasterListCache();
       addToast({
