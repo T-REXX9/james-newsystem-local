@@ -42,6 +42,12 @@ const DailyCallSalesColorBreakdown: React.FC = () => {
   }, [retry]);
 
   const rows = data ? [...data.agents, data.unassigned] : [];
+  const blockedCustomers = data?.blocked_customers ?? {
+    total: 0,
+    existing_client: 0,
+    verified_prospective: 0,
+    unverified_prospective: 0,
+  };
   const sortedRows = [...rows].sort((a, b) => {
     if (a.id === '' || b.id === '') return a.id === '' ? 1 : -1;
     return b.sales - a.sales || a.name.localeCompare(b.name);
@@ -79,6 +85,19 @@ const DailyCallSalesColorBreakdown: React.FC = () => {
         </div>
         {data && <p className="text-sm font-extrabold text-blue-800 dark:text-blue-200">Company total {money.format(data.company_total)}</p>}
       </header>
+      {data && (
+        <section aria-labelledby="daily-call-blocked-customer-breakdown" className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 id="daily-call-blocked-customer-breakdown" className="text-xs font-extrabold text-slate-800 dark:text-slate-100">Blacklisted / rejected customers</h3>
+            <p className="text-sm font-extrabold text-rose-700 dark:text-rose-300">{blockedCustomers.total.toLocaleString()} total</p>
+          </div>
+          <dl className="mt-2 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+            <div className="flex justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-800/60"><dt className="text-slate-600 dark:text-slate-300">Existing client</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.existing_client.toLocaleString()}</dd></div>
+            <div className="flex justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-800/60"><dt className="text-slate-600 dark:text-slate-300">Verified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.verified_prospective.toLocaleString()}</dd></div>
+            <div className="flex justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 dark:bg-slate-800/60"><dt className="text-slate-600 dark:text-slate-300">Unverified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.unverified_prospective.toLocaleString()}</dd></div>
+          </dl>
+        </section>
+      )}
       {error ? (
         <div className="flex items-center justify-between gap-3 px-4 py-4 text-sm text-rose-700 dark:text-rose-200">
           <span className="flex items-center gap-2"><AlertCircle className="h-4 w-4" />Unable to load the company sales breakdown.</span>

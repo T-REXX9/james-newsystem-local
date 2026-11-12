@@ -918,6 +918,12 @@ export interface DailyCallSalesColorAgent {
 export interface DailyCallSalesColorBreakdown {
   month: string;
   company_total: number;
+  blocked_customers: {
+    total: number;
+    existing_client: number;
+    verified_prospective: number;
+    unverified_prospective: number;
+  };
   agents: DailyCallSalesColorAgent[];
   unassigned: DailyCallSalesColorAgent;
 }
