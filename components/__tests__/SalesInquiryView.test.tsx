@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SalesInquiryView, { canGenerateSalesOrderFromInquiry } from '../SalesInquiryView';
+import { SalesInquiryStatus } from '../../types';
 
 const html2canvasMock = vi.hoisted(() => vi.fn());
 const addToastMock = vi.fn();
@@ -10,7 +11,15 @@ const createSalesInquiryMock = vi.fn();
 const updateSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
+const confirmSalesInquiryMock = vi.fn();
+const getSalesInquiryEditAccessMock = vi.fn();
+const requestSalesInquiryEditAccessMock = vi.fn();
+const getSalesInquiryPrintStatusMock = vi.fn();
+const recordSalesInquiryPrintMock = vi.fn();
+const requestSalesInquiryReprintMock = vi.fn();
 const approveInquiryMock = vi.fn();
+const convertToOrderMock = vi.fn();
+const getSalesOrderMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchDailyCallMasterListMock = vi.hoisted(() => vi.fn());
@@ -49,9 +58,15 @@ vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
   getAllSalesInquiries: (...args: any[]) => getAllSalesInquiriesMock(...args),
   approveInquiry: (...args: any[]) => approveInquiryMock(...args),
-  convertToOrder: vi.fn(),
+  convertToOrder: (...args: any[]) => convertToOrderMock(...args),
   updateSalesInquiry: (...args: any[]) => updateSalesInquiryMock(...args),
   getSalesInquiry: (...args: any[]) => getSalesInquiryMock(...args),
+  confirmSalesInquiry: (...args: any[]) => confirmSalesInquiryMock(...args),
+  getSalesInquiryEditAccess: (...args: any[]) => getSalesInquiryEditAccessMock(...args),
+  requestSalesInquiryEditAccess: (...args: any[]) => requestSalesInquiryEditAccessMock(...args),
+  getSalesInquiryPrintStatus: (...args: any[]) => getSalesInquiryPrintStatusMock(...args),
+  recordSalesInquiryPrint: (...args: any[]) => recordSalesInquiryPrintMock(...args),
+  requestSalesInquiryReprint: (...args: any[]) => requestSalesInquiryReprintMock(...args),
   deleteSalesInquiry: vi.fn(),
 }));
 
@@ -87,7 +102,7 @@ vi.mock('../../services/salesOrderLocalApiService', () => ({
 }));
 
 vi.mock('../../services/salesOrderService', () => ({
-  getSalesOrder: vi.fn(),
+  getSalesOrder: (...args: any[]) => getSalesOrderMock(...args),
 }));
 
 const getVipTierConfigMock = vi.fn();
@@ -248,13 +263,202 @@ describe('SalesInquiryView', () => {
   });
 
   it('blocks Sales Order generation when an inquiry already has a Sales Order reference', () => {
-    expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: 'so-22' }, true, true, false, false)).toBe(false);
-    expect(canGenerateSalesOrderFromInquiry({ status: 'Submitted', so_refno: '' }, true, true, false, false)).toBe(true);
+    expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.APPROVED, so_refno: 'so-22' }, true, false, false)).toBe(false);
+    expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.APPROVED, so_refno: '' }, true, false, false)).toBe(true);
+  });
+
+  it('keeps Generate SO available on a confirmed inquiry that is otherwise eligible', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      status: SalesInquiryStatus.APPROVED,
+      confirmed_at: '2026-09-25 10:00:00',
+      items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryEditAccessMock.mockResolvedValue({ confirmed: true, can_edit: false, has_approved_access: false, has_pending_request: false });
+    convertToOrderMock.mockResolvedValue({ id: 'so-1', order_no: 'SO-1' });
+    getSalesOrderMock.mockResolvedValue({ id: 'so-1', order_no: 'SO-1' });
+
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+
+    await waitFor(() => expect((screen.getByLabelText('Customer') as HTMLSelectElement).disabled).toBe(true));
+    const generateButtons = screen.getAllByRole('button', { name: /generate so/i });
+    expect(generateButtons.length).toBeGreaterThan(0);
+    await user.click(generateButtons[0]);
+    await waitFor(() => expect(convertToOrderMock).toHaveBeenCalledWith('inq-1'));
+  });
+
+  it('disables the confirmation action and labels it Confirmed after confirmation succeeds', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      confirmed_at: '',
+      items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    updateSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryEditAccessMock
+      .mockResolvedValueOnce({ confirmed: false, can_edit: true, has_approved_access: false, has_pending_request: false })
+      .mockResolvedValue({ confirmed: true, can_edit: false, has_approved_access: false, has_pending_request: false });
+
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+    const confirmButton = await screen.findByRole('button', { name: 'Confirm' });
+    await waitFor(() => expect((confirmButton as HTMLButtonElement).disabled).toBe(false));
+
+    await user.click(confirmButton);
+
+    const confirmedButton = await screen.findByRole('button', { name: 'Confirmed' });
+    expect((confirmedButton as HTMLButtonElement).disabled).toBe(true);
+    expect(confirmSalesInquiryMock).toHaveBeenCalledWith('inq-1', expect.objectContaining({ permissionAction: 'edit' }));
+  });
+
+  it('keeps confirmed inquiries read-only for staff and lets them request Master User permission', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({ confirmed_at: '2026-09-25 10:00:00', items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryEditAccessMock
+      .mockResolvedValueOnce({ confirmed: true, can_edit: false, has_approved_access: false, has_pending_request: false })
+      .mockResolvedValue({ confirmed: true, can_edit: false, has_approved_access: false, has_pending_request: true });
+    requestSalesInquiryEditAccessMock.mockResolvedValue({ requested: true });
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+
+    const confirmedButton = await screen.findByRole('button', { name: 'Confirmed' });
+    await waitFor(() => expect((confirmedButton as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByText(/read-only for staff/i)).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: 'Request Edit Permission' }));
+    await waitFor(() => expect(requestSalesInquiryEditAccessMock).toHaveBeenCalledWith('inq-1'));
+    expect(await screen.findByRole('button', { name: 'Permission Pending' })).toBeTruthy();
+  });
+
+  it('enables editing a confirmed inquiry only after the Master User has approved this staff member', async () => {
+    const inquiry = makeInquiry({ confirmed_at: '2026-09-25 10:00:00', items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryEditAccessMock.mockResolvedValue({ confirmed: true, can_edit: true, has_approved_access: true, has_pending_request: false });
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+
+    const saveButton = await screen.findByRole('button', { name: 'Save Changes' });
+    await waitFor(() => expect((saveButton as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByRole('button', { name: 'Request Edit Permission' })).toBeNull();
+    expect(screen.queryByText(/read-only for staff/i)).toBeNull();
+  });
+
+  it('confirms only when navigating out of Sales Inquiry, not for in-module actions or tab hiding', async () => {
+    const user = userEvent.setup();
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({ context: { user: { id: 1 } }, userProfile: { id: '1', user_type: 1, role: 'Master User' } } as any);
+    const inquiry = makeInquiry({ confirmed_at: '', items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    updateSalesInquiryMock.mockResolvedValue(inquiry);
+    render(<SalesInquiryView />);
+    await user.click(await screen.findByText('INQ26-1'));
+    await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-1'));
+    await waitFor(() => expect(screen.getAllByText('Widget').length).toBeGreaterThan(0));
+    let navigationResult: Promise<boolean> | undefined;
+    window.dispatchEvent(new CustomEvent('sales-inquiry:before-navigation', {
+      detail: { targetTab: 'sales-transaction-sales-inquiry', waitUntil: (promise: Promise<boolean>) => { navigationResult = promise; } },
+    }));
+    expect(updateSalesInquiryMock).not.toHaveBeenCalled();
+    expect(confirmSalesInquiryMock).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new CustomEvent('sales-inquiry:before-navigation', {
+      detail: { targetTab: 'home', waitUntil: (promise: Promise<boolean>) => { navigationResult = promise; } },
+    }));
+    await waitFor(() => expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1));
+    await expect(navigationResult).resolves.toBe(true);
+    expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1);
+    expect(confirmSalesInquiryMock).toHaveBeenCalledWith('inq-1', expect.objectContaining({ permissionAction: 'edit' }));
+
+    const confirmationCallsBeforeBackgrounding = confirmSalesInquiryMock.mock.calls.length;
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    expect(confirmSalesInquiryMock).toHaveBeenCalledTimes(confirmationCallsBeforeBackgrounding);
+  });
+
+  it('does not confirm a saved inquiry when a view-only user leaves', async () => {
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      context: { user: { id: 64 } },
+      userProfile: {
+        id: '64',
+        role: 'Sales Agent',
+        action_permissions: {
+          global: { can_add: false, can_edit: false },
+          pages: { 'Sales Inquiry': { can_add: false, can_edit: false } },
+        },
+      },
+    } as any);
+    const inquiry = makeInquiry({ confirmed_at: '' });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+    await screen.findAllByDisplayValue('INQ26-1');
+    await waitFor(() => expect(getSalesInquiryEditAccessMock).toHaveBeenCalledWith('inq-1'));
+
+    let navigationResult: Promise<boolean> | undefined;
+    window.dispatchEvent(new CustomEvent('sales-inquiry:before-navigation', {
+      detail: { targetTab: 'home', waitUntil: (promise: Promise<boolean>) => { navigationResult = promise; } },
+    }));
+
+    await expect(navigationResult).resolves.toBe(true);
+    expect(confirmSalesInquiryMock).not.toHaveBeenCalled();
+    expect(updateSalesInquiryMock).not.toHaveBeenCalled();
+  });
+
+  it('does not try to confirm an untouched new draft when leaving Sales Inquiry', async () => {
+    render(<SalesInquiryView />);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+
+    let navigationResult: Promise<boolean> | undefined;
+    window.dispatchEvent(new CustomEvent('sales-inquiry:before-navigation', {
+      detail: { targetTab: 'home', waitUntil: (promise: Promise<boolean>) => { navigationResult = promise; } },
+    }));
+
+    await expect(navigationResult).resolves.toBe(true);
+    expect(createSalesInquiryMock).not.toHaveBeenCalled();
+    expect(confirmSalesInquiryMock).not.toHaveBeenCalled();
+    expect(screen.queryByText('2 issues found')).toBeNull();
+  });
+
+  it('submits a reprint request instead of opening print preview when the one-print quota is used', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({ items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryPrintStatusMock.mockResolvedValue({ can_print: false, print_count: 1 });
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+    await screen.findAllByDisplayValue('INQ26-1');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Request Reprint' }).length).toBeGreaterThan(0));
+    await user.click(screen.getAllByRole('button', { name: 'Request Reprint' })[0]);
+    await waitFor(() => expect(requestSalesInquiryReprintMock).toHaveBeenCalledWith('inq-1'));
+    expect(screen.queryByText('Sales Inquiry Print')).not.toBeInTheDocument();
+  });
+
+  it('records an authorized print before opening the browser print dialog', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({ items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryPrintStatusMock.mockResolvedValue({ can_print: true, print_count: 0 });
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    render(<SalesInquiryView initialInquiryId="inq-1" />);
+    await screen.findAllByDisplayValue('INQ26-1');
+    await waitFor(() => expect(getSalesInquiryPrintStatusMock).toHaveBeenCalledWith('inq-1'));
+    await user.click((await screen.findAllByRole('button', { name: 'Print' }))[0]);
+    expect(await screen.findByText('Sales Inquiry Print')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Print Now' }));
+
+    await waitFor(() => expect(recordSalesInquiryPrintMock).toHaveBeenCalledWith('inq-1'));
+    expect(printSpy).toHaveBeenCalledTimes(1);
   });
 
   it('requires System Access Approve before generating from a draft inquiry', () => {
-    expect(canGenerateSalesOrderFromInquiry({ status: 'Pending', so_refno: '' }, true, true, false, false, false)).toBe(false);
-    expect(canGenerateSalesOrderFromInquiry({ status: 'Pending', so_refno: '' }, true, true, false, false, true)).toBe(true);
+    expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.DRAFT, so_refno: '' }, true, false, false, false)).toBe(false);
+    expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.DRAFT, so_refno: '' }, true, false, false, true)).toBe(true);
   });
 
   beforeEach(async () => {
@@ -281,7 +485,15 @@ describe('SalesInquiryView', () => {
     fetchContactByIdMock.mockImplementation(async (id: string) => baseContacts.find((contact) => contact.id === id) || null);
     getAllSalesInquiriesMock.mockResolvedValue([]);
     getSalesInquiryMock.mockResolvedValue(null);
+    confirmSalesInquiryMock.mockResolvedValue({ confirmed_at: '2026-09-25 10:00:00' });
+    getSalesInquiryEditAccessMock.mockResolvedValue({ confirmed: false, can_edit: true, has_approved_access: false, has_pending_request: false });
+    requestSalesInquiryEditAccessMock.mockResolvedValue({ requested: true });
+    getSalesInquiryPrintStatusMock.mockResolvedValue({ can_print: true, print_count: 0 });
+    recordSalesInquiryPrintMock.mockResolvedValue(undefined);
+    requestSalesInquiryReprintMock.mockResolvedValue(undefined);
     approveInquiryMock.mockResolvedValue(null);
+    convertToOrderMock.mockResolvedValue({ id: 'so-default', order_no: 'SO-DEFAULT' });
+    getSalesOrderMock.mockResolvedValue(null);
     dispatchWorkflowNotificationMock.mockResolvedValue(undefined);
     markNotificationsAsReadByEntityKeyMock.mockResolvedValue(undefined);
     resolveNotificationUserIdMock.mockResolvedValue('user-2');
@@ -330,6 +542,7 @@ describe('SalesInquiryView', () => {
 
   afterEach(() => {
     cleanup();
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
   });
 
   it('shows unfiltered inquiries newest to oldest by default', async () => {
@@ -360,7 +573,7 @@ describe('SalesInquiryView', () => {
     expect(list).toHaveClass('overflow-x-auto', 'lg:overflow-x-hidden');
     expect(list.querySelectorAll('table')).toHaveLength(1);
     expect(list.querySelector('table')).toHaveClass('min-w-[1100px]', 'lg:min-w-0');
-    ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Agent', 'Status'].forEach((heading) => {
+    ['Created At', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Agent', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
   });
@@ -577,9 +790,10 @@ describe('SalesInquiryView', () => {
     await user.click(screen.getByRole('button', { name: /add item/i }));
     expect(screen.getByRole('button', { name: 'Select Product' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Select Product' }));
-    await user.click(screen.getByRole('button', { name: /create inquiry/i }));
+    await user.click(screen.getByRole('button', { name: /^confirm$/i }));
 
     await waitFor(() => expect(createSalesInquiryMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(confirmSalesInquiryMock).toHaveBeenCalledWith('inq-1', expect.objectContaining({ permissionAction: 'add' })));
 
     const payload = createSalesInquiryMock.mock.calls[0][0];
     expect(payload.contact_id).toBe('c-1');
@@ -589,6 +803,38 @@ describe('SalesInquiryView', () => {
 
     const ourReferenceAfterSave = await waitFor(() => screen.getByText('Our Reference:').closest('tr'));
     expect(within(ourReferenceAfterSave as HTMLElement).getByDisplayValue(payload.reference_no)).toBeInTheDocument();
+  });
+
+  it('reuses a created inquiry when confirmation fails and is retried', async () => {
+    const user = userEvent.setup();
+    createSalesInquiryMock.mockImplementation(async (data: Record<string, any>) => ({
+      ...makeInquiry({ confirmed_at: '' }),
+      ...data,
+      id: 'inq-1',
+    }));
+    confirmSalesInquiryMock.mockRejectedValueOnce(new Error('temporary confirmation failure'));
+
+    render(<SalesInquiryView />);
+    await waitFor(() => expect(fetchContactsMock).toHaveBeenCalled());
+    await user.selectOptions(screen.getByLabelText('Customer'), 'c-1');
+    await user.click(screen.getByRole('button', { name: /add item/i }));
+    await user.click(screen.getByRole('button', { name: 'Select Product' }));
+    await user.click(screen.getByRole('button', { name: /^confirm$/i }));
+
+    await waitFor(() => expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', title: 'Unable to create inquiry' })));
+    expect(createSalesInquiryMock).toHaveBeenCalledTimes(1);
+    expect((screen.getByLabelText('Customer') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Create New' }) as HTMLButtonElement).disabled).toBe(true);
+
+    const retryButton = screen.getByRole('button', { name: /^confirm$/i });
+    await waitFor(() => expect((retryButton as HTMLButtonElement).disabled).toBe(false));
+    await user.click(retryButton);
+
+    await waitFor(() => expect(confirmSalesInquiryMock).toHaveBeenCalledTimes(2));
+    expect(createSalesInquiryMock).toHaveBeenCalledTimes(1);
+    expect(updateSalesInquiryMock).not.toHaveBeenCalled();
+    expect(confirmSalesInquiryMock).toHaveBeenNthCalledWith(1, 'inq-1', expect.objectContaining({ permissionAction: 'add' }));
+    expect(confirmSalesInquiryMock).toHaveBeenNthCalledWith(2, 'inq-1', expect.objectContaining({ permissionAction: 'add' }));
   });
 
   it('opens a focused modal for adding a not-listed item with only Product No., Description, and Qty', async () => {
@@ -918,7 +1164,7 @@ describe('SalesInquiryView', () => {
 
     await user.click(await screen.findByText('INQ26-501'));
     await waitFor(() => expect(getSalesInquiryMock).toHaveBeenCalledWith('inq-save-reference'));
-    await user.click(screen.getByRole('button', { name: /create inquiry/i }));
+    await user.click(screen.getByRole('button', { name: /^confirm$/i }));
 
     await waitFor(() => expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1));
     expect(updateSalesInquiryMock.mock.calls[0][1].reference_no).toBe('INQ26-501');
@@ -959,10 +1205,11 @@ describe('SalesInquiryView', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Customer' })).toHaveValue('c-1'));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Customer' }), replacementCustomer.id);
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Customer' })).toHaveValue(replacementCustomer.id));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled());
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).not.toBeDisabled());
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => expect(updateSalesInquiryMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(confirmSalesInquiryMock).toHaveBeenCalledWith('inq-customer-change', expect.objectContaining({ permissionAction: 'edit' })));
     expect(updateSalesInquiryMock.mock.calls[0][1].contact_id).toBe(replacementCustomer.id);
   });
 

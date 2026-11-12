@@ -8,6 +8,7 @@ import { ToastProvider } from '../ToastProvider';
 const html2canvasMock = vi.hoisted(() => vi.fn());
 const getAllSalesOrdersMock = vi.fn();
 const getSalesOrderMock = vi.fn();
+const convertToDocumentMock = vi.fn();
 const updateSalesOrderMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
@@ -22,7 +23,7 @@ vi.mock('html2canvas', () => ({
 
 vi.mock('../../services/salesOrderLocalApiService', () => ({
   confirmSalesOrder: vi.fn(),
-  convertToDocument: vi.fn(),
+  convertToDocument: (...args: any[]) => convertToDocumentMock(...args),
   getSalesOrder: (...args: any[]) => getSalesOrderMock(...args),
   getAllSalesOrders: (...args: any[]) => getAllSalesOrdersMock(...args),
   syncDocumentPolicyState: vi.fn(),
@@ -61,7 +62,7 @@ const getLocalAuthSessionMock = vi.hoisted(() =>
 );
 
 vi.mock('../../services/localAuthService', () => ({
-  getLocalAuthSession: (...args: unknown[]) => getLocalAuthSessionMock(...args),
+  getLocalAuthSession: () => getLocalAuthSessionMock(),
 }));
 
 vi.mock('../../services/salesDocumentDateService', () => ({
@@ -82,7 +83,9 @@ vi.mock('../../services/vipTierSettingsService', () => ({
 }));
 
 vi.mock('../../services/notificationLocalApiService', () => ({
+  dispatchWorkflowNotification: vi.fn().mockResolvedValue(undefined),
   markNotificationsAsReadByEntityKey: vi.fn(),
+  resolveNotificationUserId: vi.fn().mockResolvedValue(null),
 }));
 
 const makeOrder = (overrides: Record<string, any> = {}) => ({
@@ -157,6 +160,7 @@ describe('SalesOrderView', () => {
     fetchProfilesMock.mockResolvedValue([]);
     fetchContactByIdMock.mockResolvedValue(null);
     getSalesOrderMock.mockResolvedValue(null);
+    convertToDocumentMock.mockResolvedValue(null);
     getLedgerMock.mockResolvedValue({ metrics: { ishinomoto_sales: 7800, monthly_sales: 29460 } });
     getVipTierConfigMock.mockResolvedValue({
       one_time_discount_threshold: 10000,
@@ -246,6 +250,24 @@ describe('SalesOrderView', () => {
     ['Date', 'Customer', 'SI No.', 'SO No.', 'Transaction No.', 'Sales Agent', 'Status'].forEach((heading) => {
       expect(within(list).getByText(heading)).toBeVisible();
     });
+  });
+
+  it('keeps the Sales Transaction conversion available for an order generated from an inquiry', async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ id: 'inquiry-order', order_no: 'SO-INQUIRY', inquiry_id: 'inq-1', status: 'Submitted' });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+    convertToDocumentMock.mockResolvedValue({ id: 'invoice-1', invoice_no: 'INV-1' });
+
+    renderView({ initialOrderId: order.id });
+
+    await screen.findByDisplayValue('SO-INQUIRY');
+    await user.click(screen.getByRole('button', { name: 'Generate Sales Transaction' }));
+    await screen.findByText('Convert to Document');
+    await user.click(screen.getByRole('button', { name: 'Convert' }));
+
+    await waitFor(() => expect(convertToDocumentMock).toHaveBeenCalledWith(order.id));
   });
 
   it('shows the customer summary bar with the Sales Inquiry metrics', async () => {
@@ -537,6 +559,7 @@ describe('SalesOrderView', () => {
         action_permissions: {
           global: {
             can_view: true,
+            can_approve: true,
             can_edit: true,
             can_add: true,
             can_delete: true,
@@ -568,6 +591,7 @@ describe('SalesOrderView', () => {
         action_permissions: {
           global: {
             can_view: true,
+            can_approve: true,
             can_edit: true,
             can_add: true,
             can_delete: true,

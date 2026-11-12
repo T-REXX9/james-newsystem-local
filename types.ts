@@ -74,7 +74,7 @@ export interface Notification {
   type: NotificationType;
   category?: NotificationCategory;
   action_url?: string;
-  metadata?: StandardNotificationPayload;
+  metadata?: Partial<StandardNotificationPayload>;
   is_read: boolean;
   created_at: string;
   read_at?: string;
@@ -102,6 +102,7 @@ export type ActionPermissionEntry = {
   can_unpost: boolean;
   can_edit_invoice_number: boolean;
   can_edit_unit_price: boolean;
+  can_view_all_records?: boolean;
 };
 
 export type PageActionPermissions = {
@@ -1320,6 +1321,7 @@ export interface SalesInquiry {
   total_to_pay?: number;
   created_by: string;
   created_by_name?: string;
+  confirmed_at?: string;
   created_at: string;
   updated_at?: string;
   status: SalesInquiryStatus;

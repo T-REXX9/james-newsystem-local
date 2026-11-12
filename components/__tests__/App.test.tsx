@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, cleanup, act } from '@testing-library/react';
 import App from '../../App';
 import { getLocalAuthSession, restoreLocalAuthSession, logoutFromLocalApi, localAuthChangedEventName } from '../../services/localAuthService';
 
@@ -167,6 +167,39 @@ describe('App authentication flow', () => {
     await waitFor(() => expect(window.location.hash).toBe('#/home'));
     expect(screen.getByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();
     expect(mockedLogoutFromLocalApi).not.toHaveBeenCalled();
+  });
+
+  it('waits for Sales Inquiry confirmation only when workflow navigation leaves that module', async () => {
+    window.history.replaceState(null, '', '/#/sales-transaction-sales-inquiry');
+    mockedRestoreLocalAuthSession.mockResolvedValue({
+      token: 'token-1',
+      context: { token: 'token-1', user: { id: 1, main_userid: 1 }, main_userid: 1 },
+      userProfile: { id: '1', email: 'owner@example.com', full_name: 'Owner User', role: 'Owner', access_rights: ['*'] },
+    } as any);
+
+    const beforeNavigation = vi.fn((event: Event) => {
+      (event as CustomEvent).detail.waitUntil(Promise.resolve(true));
+    });
+    window.addEventListener('sales-inquiry:before-navigation', beforeNavigation);
+    render(<App />);
+    await screen.findByText('SalesInquiryView');
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'sales-transaction-sales-inquiry' } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(beforeNavigation).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('workflow:navigate', { detail: { tab: 'home' } }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(beforeNavigation).toHaveBeenCalledTimes(1);
+    expect(beforeNavigation.mock.calls[0][0]).toMatchObject({
+      detail: expect.objectContaining({ targetTab: 'home' }),
+    });
+    expect(await screen.findByText('OwnerDailyCallMonitoringUnifiedView')).toBeInTheDocument();
+    window.removeEventListener('sales-inquiry:before-navigation', beforeNavigation);
   });
 
   it('does not mount authenticated pages until a cached session is validated', async () => {
