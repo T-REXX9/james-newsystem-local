@@ -47,6 +47,19 @@ describe('CustomerStarIndicator', () => {
     await act(async () => {});
     expect(await screen.findByRole('status', { name: 'Do Not Call' })).toHaveTextContent('Do Not Call');
   });
+  it('shows the Do Not Call badge alongside the customer identity badge', async () => {
+    vi.mocked(fetchStarredCustomerIds).mockResolvedValue([]);
+    vi.mocked(fetchCustomerIdentifiers).mockResolvedValue(new Map([['customer-42', ['Do Not Call', 'Existing Customer']]]));
+
+    render(
+      <CustomerStarProvider>
+        <CustomerStarIndicator customerId="customer-42" />
+      </CustomerStarProvider>,
+    );
+
+    expect(await screen.findByRole('status', { name: 'Do Not Call' })).toHaveTextContent('Do Not Call');
+    expect(screen.getByRole('status', { name: 'Existing Customer' })).toHaveTextContent('Existing Customer');
+  });
 });
 
 describe('CustomerStarProvider', () => {
