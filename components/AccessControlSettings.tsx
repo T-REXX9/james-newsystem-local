@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle,
@@ -20,6 +20,7 @@ import {
   getPageActionPermissions,
   setPageActionPermission,
   isCompanyOwnerRole,
+  isMasterUserType,
 } from '../constants';
 import {
   createStaffAccountLocal,
@@ -33,6 +34,7 @@ import {
   updateAccessGroup,
 } from '../services/accessGroupApiService';
 import { parseSupabaseError } from '../utils/errorHandler';
+import { getLocalAuthSession } from '../services/localAuthService';
 import {
   AccessGroup,
   CreateStaffAccountInput,
@@ -46,6 +48,7 @@ import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessP
 import { hasBackdatedPostingPermission, setBackdatedPostingPermission } from '../utils/backdatedPosting';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
+import { listSalesInquiryPrintRequests, reviewSalesInquiryPrintRequest, type SalesInquiryPrintRequest } from '../services/salesInquiryLocalApiService';
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
 const GROUP_COLUMN_WIDTH = 220;
@@ -138,10 +141,14 @@ const getEffectiveCanonicalRights = (rights: string[] | null | undefined): Set<s
 
 const AccessControlSettings: React.FC = () => {
   const { addToast } = useToast();
+  const isMasterUser = isMasterUserType(getLocalAuthSession()?.userProfile);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [originalProfiles, setOriginalProfiles] = useState<UserProfile[]>([]);
   const [groups, setGroups] = useState<AccessGroup[]>([]);
-  const [activeTab, setActiveTab] = useState<'groups' | 'staff'>('staff');
+  const [activeTab, setActiveTab] = useState<'groups' | 'staff' | 'print-requests'>('staff');
+  const [printRequests, setPrintRequests] = useState<SalesInquiryPrintRequest[]>([]);
+  const [printRequestsLoading, setPrintRequestsLoading] = useState(false);
+  const [reviewingPrintRequestId, setReviewingPrintRequestId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGroupsLoading, setIsGroupsLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -176,6 +183,38 @@ const AccessControlSettings: React.FC = () => {
   useEffect(() => {
     loadGroups();
   }, []);
+
+  const reloadPrintRequests = useCallback(async () => {
+    setPrintRequestsLoading(true);
+    try {
+      setPrintRequests(await listSalesInquiryPrintRequests());
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to load reprint requests', description: error instanceof Error ? error.message : 'Please try again.' });
+    } finally {
+      setPrintRequestsLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    if (isMasterUser && activeTab === 'print-requests') void reloadPrintRequests();
+  }, [activeTab, isMasterUser, reloadPrintRequests]);
+
+  useEffect(() => {
+    if (!isMasterUser && activeTab === 'print-requests') setActiveTab('staff');
+  }, [activeTab, isMasterUser]);
+
+  const handleReviewPrintRequest = async (requestId: number, decision: 'approved' | 'rejected') => {
+    setReviewingPrintRequestId(requestId);
+    try {
+      await reviewSalesInquiryPrintRequest(requestId, decision);
+      setPrintRequests((current) => current.filter((request) => request.id !== requestId));
+      addToast({ type: 'success', title: decision === 'approved' ? 'Reprint approved' : 'Request declined' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to review request', description: error instanceof Error ? error.message : 'Refresh and try again.' });
+    } finally {
+      setReviewingPrintRequestId(null);
+    }
+  };
 
   const loadProfiles = async (targetPage = page) => {
     setIsLoading(true);
@@ -258,7 +297,7 @@ const AccessControlSettings: React.FC = () => {
       prevProfiles.map((profile) => {
         if (profile.id !== userId) return profile;
 
-        const currentRights = new Set(profile.access_rights || []);
+        const currentRights = new Set<string>((profile.access_rights || []) as string[]);
         if (currentRights.has('*')) {
           currentRights.delete('*');
           ACCESS_MODULES.filter((module) => module.id !== moduleId).forEach((module) => {
@@ -611,6 +650,7 @@ const AccessControlSettings: React.FC = () => {
         {[
           { id: 'groups', label: 'Groups' },
           { id: 'staff', label: 'Staff' },
+          ...(isMasterUser ? [{ id: 'print-requests', label: `Reprint requests${printRequests.length ? ` (${printRequests.length})` : ''}` }] : []),
         ].map((tab) => (
           <button
             key={tab.id}
@@ -634,7 +674,7 @@ const AccessControlSettings: React.FC = () => {
           onUpdateGroup={handleUpdateGroup}
           onDeleteGroup={handleDeleteGroup}
         />
-      ) : (
+      ) : activeTab === 'staff' ? (
         <>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 md:flex-row md:items-center md:justify-between">
@@ -873,6 +913,36 @@ const AccessControlSettings: React.FC = () => {
             </p>
           </div>
         </>
+      ) : (
+        <section aria-label="Sales inquiry reprint requests" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-bold text-slate-800 dark:text-white">Sales inquiry reprints</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Approve a request to allow one additional print for that staff member and inquiry.</p>
+            </div>
+            <button type="button" onClick={() => void reloadPrintRequests()} className="mt-2 self-start rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:mt-0">Refresh</button>
+          </div>
+          {printRequestsLoading ? (
+            <div className="p-6"><CustomLoadingSpinner label="Loading reprint requests" /></div>
+          ) : printRequests.length === 0 ? (
+            <p className="p-6 text-sm text-slate-500 dark:text-slate-400">No pending reprint requests.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {printRequests.map((request) => (
+                <li key={request.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 dark:text-white">Inquiry {request.inquiry_no || 'number unavailable'}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{request.requested_by_name?.trim() || `Staff account #${request.requested_by}`} · Requested {request.requested_at}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button type="button" disabled={reviewingPrintRequestId === request.id} onClick={() => void handleReviewPrintRequest(request.id, 'approved')} className="rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50">Approve</button>
+                    <button type="button" disabled={reviewingPrintRequestId === request.id} onClick={() => void handleReviewPrintRequest(request.id, 'rejected')} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Decline</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       )}
 
       {isAddUserModalOpen && (

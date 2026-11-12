@@ -6,6 +6,7 @@ import { Contact, SalesInquiryStatus } from '../../types';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
 
 vi.mock('lucide-react', () => ({
@@ -57,6 +58,30 @@ const inquiry = {
 };
 
 describe('SalesInquiryPrintPreview', () => {
+  it('uses the current time when Print Now is clicked instead of the inquiry time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-12T10:00:00.000Z'));
+    const onPrint = vi.fn();
+    render(
+      <SalesInquiryPrintPreview
+        inquiry={{ ...inquiry, confirmed_at: '2026-04-08 09:30:00' }}
+        customer={{ id: 'c-1', company: 'Acme Corp', address: '123 Main St' } as Contact}
+        inquiryNumberLabel="INQ26-99"
+        preparedBy="Melson Creator"
+        onClose={() => undefined}
+        onPrint={onPrint}
+      />
+    );
+
+    vi.setSystemTime(new Date('2026-11-12T10:05:00.000Z'));
+    fireEvent.click(screen.getByRole('button', { name: /print now/i }));
+
+    const preparedFooterText = screen.getByText(/Prepared By :/).parentElement?.textContent?.replace(/\u2011/g, '-') || '';
+    expect(preparedFooterText).toContain('NOV-12-26 6:05 PM');
+    expect(preparedFooterText).not.toContain('APR-08-26 09:30');
+    expect(onPrint).toHaveBeenCalledTimes(1);
+  });
+
   it('prints the inquiry number as Our Reference even when a stored reference differs', () => {
     render(
       <SalesInquiryPrintPreview

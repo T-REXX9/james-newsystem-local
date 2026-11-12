@@ -35,6 +35,10 @@ import {
   deleteSalesInquiry,
   getSalesInquiry,
   getAllSalesInquiries,
+  confirmSalesInquiry,
+  getSalesInquiryPrintStatus,
+  recordSalesInquiryPrint,
+  requestSalesInquiryReprint,
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
 import { getProductPrice, fetchSalesInquiryProductById } from '../services/productLocalApiService';
@@ -196,6 +200,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const customerSelectionDirtyRef = React.useRef(false);
   // Data
   const [loading, setLoading] = useState(false);
+  const submitInFlightRef = useRef(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
@@ -257,6 +262,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [printStatus, setPrintStatus] = useState<{ can_print: boolean; print_count: number; has_pending_request?: boolean } | null>(null);
+  const [printStatusLoading, setPrintStatusLoading] = useState(false);
+  const [printStatusError, setPrintStatusError] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
 
   const getInquirySortTime = (inquiry: SalesInquiry) => {
@@ -320,6 +328,40 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     void refetchInquiries();
   }, [refetchInquiries]);
+
+  useEffect(() => {
+    let active = true;
+    setPrintStatus(null);
+    setPrintStatusLoading(false);
+    setPrintStatusError('');
+    if (selectedInquiry?.id && !isCreatingNew) {
+      setPrintStatusLoading(true);
+      void getSalesInquiryPrintStatus(selectedInquiry.id)
+        .then((status) => { if (active) setPrintStatus(status); })
+        .catch((error) => {
+          if (active) {
+            console.error('Unable to load inquiry print permission:', error);
+            setPrintStatusError(error instanceof Error ? error.message : 'Unable to check print permission.');
+          }
+        })
+        .finally(() => { if (active) setPrintStatusLoading(false); });
+    }
+    return () => { active = false; };
+  }, [selectedInquiry?.id, isCreatingNew]);
+
+  const handleRetryPrintStatus = async () => {
+    if (!selectedInquiry?.id) return;
+    setPrintStatusLoading(true);
+    setPrintStatusError('');
+    try {
+      setPrintStatus(await getSalesInquiryPrintStatus(selectedInquiry.id));
+    } catch (error) {
+      setPrintStatus(null);
+      setPrintStatusError(error instanceof Error ? error.message : 'Unable to check print permission.');
+    } finally {
+      setPrintStatusLoading(false);
+    }
+  };
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
@@ -660,7 +702,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         }
       }
 
-      const parsedDate = inquiry.sales_date ? new Date(inquiry.sales_date) : null;
+      const inquiryCreatedDate = inquiry.confirmed_at?.slice(0, 10) || inquiry.sales_date;
+      const parsedDate = inquiryCreatedDate ? new Date(inquiryCreatedDate) : null;
       const dayValue = parsedDate ? String(parsedDate.getDate()) : '';
       const monthValue = parsedDate ? String(parsedDate.getMonth() + 1) : '';
       const yearValue = parsedDate ? String(parsedDate.getFullYear()) : '';
@@ -1160,10 +1203,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   ]);
 
   // Handle submit
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, options?: { keepalive?: boolean }): Promise<boolean> => {
     e.preventDefault();
+    if (loading || submitInFlightRef.current) return false;
 
-    if (isCreatingNew ? !canAdd : !canEdit) return;
+    if (isCreatingNew ? !canAdd : !canEdit) return false;
 
     if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
       addToast({
@@ -1171,21 +1215,22 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         title: 'Inquiry locked',
         description: 'This inquiry can no longer be edited because it has already been converted to an invoice or order slip.',
       });
-      return;
+      return false;
     }
 
     if (!validateInquiryForm()) {
       setSubmitCount((prev) => prev + 1);
       addToast({ type: 'warning', title: 'Fix validation issues', description: 'Review the highlighted fields and try again.' });
-      return;
+      return false;
     }
 
+    submitInFlightRef.current = true;
     setLoading(true);
     setSubmitError('');
     try {
       if (!selectedCustomer?.id) {
         addToast({ type: 'warning', title: 'Missing customer', description: 'Please select a customer before saving.' });
-        return;
+        return false;
       }
 
       // Prepare inquiry type
@@ -1223,9 +1268,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       };
 
       if (selectedInquiry?.id) {
-        const updated = await updateSalesInquiry(selectedInquiry.id, inquiryData);
+        const updated = await updateSalesInquiry(selectedInquiry.id, inquiryData, options);
+        const confirmation = await (options?.keepalive ? confirmSalesInquiry(updated.id, options) : confirmSalesInquiry(updated.id));
+        const confirmedInquiry = await getSalesInquiry(updated.id);
+        const finalInquiry = { ...(confirmedInquiry || updated), confirmed_at: confirmation.confirmed_at, created_at: confirmation.confirmed_at };
         await refetchInquiries();
-        addToast({ type: 'success', message: 'Inquiry updated successfully!' });
+        addToast({ type: 'success', message: 'Inquiry confirmed successfully.' });
 
         // Dispatch event to notify other views (e.g., sales order) to refresh
         window.dispatchEvent(new CustomEvent('inquiry:updated', {
@@ -1236,16 +1284,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           }
         }));
 
-        if (updated?.id && updated?.contact_id) {
-          setSelectedInquiry(updated);
-          loadInquiryIntoForm(updated);
-        }
-        return;
+        setSelectedInquiry(finalInquiry);
+        loadInquiryIntoForm(finalInquiry);
+        return true;
       }
 
-      const created = await createSalesInquiry(inquiryData);
+      const created = await createSalesInquiry(inquiryData, options);
+      const confirmation = await (options?.keepalive ? confirmSalesInquiry(created.id, options) : confirmSalesInquiry(created.id));
+      const confirmedInquiry = await getSalesInquiry(created.id);
       await refetchInquiries();
-      addToast({ type: 'success', message: 'Sales Inquiry created successfully!' });
+      addToast({ type: 'success', message: 'Sales Inquiry confirmed successfully.' });
 
       if (created?.id && (created as SalesInquiry).contact_id) {
         await notifyInquiryEvent(
@@ -1258,7 +1306,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         );
         setIsCreatingNew(false);
         const createdInquiry = {
-          ...(created as SalesInquiry),
+          ...((confirmedInquiry || created) as SalesInquiry),
+          confirmed_at: confirmation.confirmed_at,
+          created_at: confirmation.confirmed_at,
           status: SalesInquiryStatus.DRAFT,
         };
         setSelectedInquiry(createdInquiry);
@@ -1266,12 +1316,15 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       } else {
         startNewInquiry();
       }
+      return true;
     } catch (error) {
       console.error('Error creating inquiry:', error);
       const friendlyMessage = parseSupabaseError(error, 'sales inquiry');
       setSubmitError(friendlyMessage);
       addToast({ type: 'error', title: 'Unable to create inquiry', description: friendlyMessage, durationMs: 6000 });
+      return false;
     } finally {
+      submitInFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -1290,7 +1343,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         previousYmd: isCreatingNew ? null : previousSalesDate,
         todayYmd: salesDateMax,
       });
-      if (!backdateCheck.ok) errors.salesDate = backdateCheck.reason;
+      if (backdateCheck.ok === false) errors.salesDate = backdateCheck.reason;
     }
     const timeCheck = validateRequired(salesTime, 'a sales time');
     if (!timeCheck.isValid) errors.salesTime = timeCheck.message;
@@ -1507,12 +1560,85 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     isPosted: isInquiryPostedLike,
   });
   const salesDateMax = localTodayYmd();
-  const handlePrint = () => {
+  useEffect(() => {
+    const confirmBeforeLeaving = async (keepalive = false): Promise<boolean> => {
+      const hasSavedInquiry = Boolean(selectedInquiry?.id && !isCreatingNew);
+      const hasDraftData = Boolean(
+        selectedCustomer?.id || items.length || customerReference.trim() || sendBy.trim()
+        || poNumber.trim() || remarks.trim() || promiseToPay.trim() || deliveryAddress.trim() || newInquiryType.trim()
+        || urgencyDate.trim() || salesPerson.trim() || priceGroup.trim() || terms.trim() || creditLimit > 0
+      );
+      const untouchedNewDraft = !hasSavedInquiry && !hasDraftData;
+      if (untouchedNewDraft) return true;
+      if (hasSavedInquiry && (!canWriteInquiry || isReadOnly)) {
+        try {
+          const confirmation = await confirmSalesInquiry(selectedInquiry!.id, { keepalive });
+          setSelectedInquiry((current) => current?.id === selectedInquiry?.id
+            ? { ...current, confirmed_at: confirmation.confirmed_at, created_at: confirmation.confirmed_at }
+            : current);
+          return true;
+        } catch (error) {
+          addToast({ type: 'error', title: 'Unable to confirm inquiry', description: error instanceof Error ? error.message : 'Please try again.' });
+          return false;
+        }
+      }
+      return handleSubmit({ preventDefault: () => undefined } as React.FormEvent, { keepalive });
+    };
+    const handleBeforeAppNavigation = (event: Event) => {
+      const customEvent = event as CustomEvent<{ targetTab?: string; waitUntil: (promise: Promise<boolean>) => void }>;
+      if (!customEvent.detail?.targetTab || customEvent.detail.targetTab === SALES_INQUIRY_TAB_ID) return;
+      customEvent.detail?.waitUntil(confirmBeforeLeaving());
+    };
+    window.addEventListener('sales-inquiry:before-navigation', handleBeforeAppNavigation);
+    return () => {
+      window.removeEventListener('sales-inquiry:before-navigation', handleBeforeAppNavigation);
+    };
+  }, [addToast, canWriteInquiry, creditLimit, customerReference, deliveryAddress, handleSubmit, isCreatingNew, isReadOnly, items.length, newInquiryType, poNumber, priceGroup, promiseToPay, referenceNo, remarks, salesPerson, selectedCustomer?.id, selectedInquiry?.id, sendBy, terms, urgencyDate]);
+  const handlePrint = async () => {
     if (!printableInquiry) return;
-    setJpegCaptureMode(false);
-    setShowPrintPreview(true);
+    try {
+      const status = printStatus || await getSalesInquiryPrintStatus(printableInquiry.id);
+      setPrintStatus(status);
+      if (!status.can_print) {
+        if (status.has_pending_request) {
+          addToast({ type: 'info', title: 'Request already pending', description: 'The Master User can review it in System Access.' });
+          return;
+        }
+        await requestSalesInquiryReprint(printableInquiry.id);
+        setPrintStatus(await getSalesInquiryPrintStatus(printableInquiry.id));
+        addToast({ type: 'success', title: 'Reprint requested', description: 'The Master User can approve the request in System Access.' });
+        return;
+      }
+      setJpegCaptureMode(false);
+      setShowPrintPreview(true);
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to prepare print', description: error instanceof Error ? error.message : 'Please try again.' });
+    }
   };
-  const handleExportJpeg = () => {
+  const handlePrintNow = async () => {
+    if (!selectedInquiry?.id) return;
+    try {
+      await recordSalesInquiryPrint(selectedInquiry.id);
+      window.print();
+      setShowPrintPreview(false);
+      setJpegCaptureMode(false);
+      void getSalesInquiryPrintStatus(selectedInquiry.id).then(setPrintStatus).catch(() => undefined);
+    } catch (error) {
+      addToast({ type: 'error', title: 'Print not allowed', description: error instanceof Error ? error.message : 'Please request approval for another print.' });
+      setShowPrintPreview(false);
+    }
+  };
+  const handleRequestReprint = async () => {
+    if (!selectedInquiry?.id) return;
+    try {
+      await requestSalesInquiryReprint(selectedInquiry.id);
+      setPrintStatus(await getSalesInquiryPrintStatus(selectedInquiry.id));
+      addToast({ type: 'success', title: 'Reprint requested', description: 'The Master User can approve the request in System Access.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to request reprint', description: error instanceof Error ? error.message : 'Please try again.' });
+    }
+  };
+  const handleExportJpeg = async () => {
     if (!printableInquiry) {
       addToast({
         type: 'warning',
@@ -1522,9 +1648,25 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       return;
     }
     if (exportingJpeg) return;
-    setExportingJpeg(true);
-    setJpegCaptureMode(true);
-    setShowPrintPreview(true);
+    try {
+      const status = printStatus || await getSalesInquiryPrintStatus(printableInquiry.id);
+      setPrintStatus(status);
+      if (!status.can_print) {
+        if (status.has_pending_request) {
+          addToast({ type: 'info', title: 'Request already pending', description: 'The Master User can review it in System Access.' });
+        } else {
+          await handleRequestReprint();
+        }
+        return;
+      }
+      await recordSalesInquiryPrint(printableInquiry.id);
+      void getSalesInquiryPrintStatus(printableInquiry.id).then(setPrintStatus).catch(() => undefined);
+      setExportingJpeg(true);
+      setJpegCaptureMode(true);
+      setShowPrintPreview(true);
+    } catch (error) {
+      addToast({ type: 'error', title: 'Export not allowed', description: error instanceof Error ? error.message : 'Please request approval for another copy.' });
+    }
   };
   const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
     if (!jpegCaptureMode) return;
@@ -1686,6 +1828,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     const timeLabel = String(timeValue || '').slice(0, 5);
     return [dateLabel, timeLabel].filter(Boolean).join(' ');
   };
+  const formatInquiryCreatedAt = (inquiry?: SalesInquiry | null) => {
+    if (inquiry?.confirmed_at) {
+      return formatLegacyListDateTime(inquiry.confirmed_at.slice(0, 10), inquiry.confirmed_at.slice(11, 16));
+    }
+    return formatLegacyListDateTime(inquiry?.sales_date, inquiry?.sales_time);
+  };
   const clearInquiryFilters = () => {
     const today = new Date();
     setSearchTerm('');
@@ -1733,7 +1881,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               <table className="w-full min-w-[1100px] table-fixed border-collapse text-[13px] lg:min-w-0">
                 <colgroup>{inquiryListColumnWidths.map((width, index) => <col key={`${width}-${index}`} style={{ width }} />)}</colgroup>
                 <thead className="sticky top-0 z-10 bg-white"><tr className="border-b-2 border-[#d5d5d5] text-left text-[14px] font-semibold">
-                  <th className="px-2 pb-2">Date</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Agent</th><th className="px-2 pb-2">Status</th>
+                  <th className="px-2 pb-2">Created At</th><th className="px-2 pb-2">Customer</th><th className="px-2 pb-2">SI No.</th><th className="px-2 pb-2">SO No.</th><th className="px-2 pb-2">Transaction No.</th><th className="px-2 pb-2">Sales Agent</th><th className="px-2 pb-2">Status</th>
                 </tr></thead>
                 <tbody>
                   {listLoading ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">Loading inquiries...</td></tr> : filteredInquiries.length === 0 ? <tr><td colSpan={7} className="border border-[#d7d7d7] px-2 py-4 text-center text-[#777]">No inquiries found.</td></tr> : filteredInquiries.map((inquiry) => {
@@ -1741,7 +1889,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     const isActive = selectedInquiry?.id === inquiry.id && !isCreatingNew;
                     const rowColor = inquiry.status === SalesInquiryStatus.CANCELLED ? 'text-[#d33]' : isActive ? 'text-[#245d91]' : 'text-[#202020]';
                     return <tr key={inquiry.id} onClick={() => selectInquiryAndSync(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatLegacyListDateTime(inquiry.sales_date, inquiry.sales_time)}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatInquiryCreatedAt(inquiry)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="push" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_refno ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: inquiry.so_refno }} className="underline" newWindowLabel="Open sales order in new window">{inquiry.so_no || inquiry.so_refno}</ModuleRecordAction> : (inquiry.so_no || '')}</td>
@@ -1780,6 +1928,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
           <form id="salesInquiryLegacyForm" onSubmit={handleSubmit} className="px-[25px] pb-[30px] pt-[38px]">
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {selectedInquiry?.confirmed_at && <p className="mb-3 text-xs text-slate-500">Confirmed at: <time dateTime={selectedInquiry.confirmed_at}>{selectedInquiry.confirmed_at}</time></p>}
             {submitError && <div className="mb-3 rounded border border-[#e8b5b5] bg-[#fff3f3] px-3 py-2 text-[12px] text-[#a33]">{submitError}</div>}
             {isConversionLocked && <div className="mb-3 rounded border border-[#e1c57b] bg-[#fff9e9] px-3 py-2 text-[12px] text-[#725b1b]">This inquiry is locked because it already has a sales document.</div>}
 
@@ -1859,8 +2008,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
               {(isCreatingNew ? canAdd : canDelete) && <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>}
-              {printableInquiry && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
-              {canWriteInquiry && <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Saving...' : 'Save'}</button>}
+              {printableInquiry && <button type="button" disabled={printStatusLoading || (!printStatus && !printStatusError) || Boolean(printStatus && !printStatus.can_print && printStatus.has_pending_request)} onClick={() => { if (!printStatus) void handleRetryPrintStatus(); else void (printStatus.can_print ? handlePrint() : handleRequestReprint()); }} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{printStatusLoading ? 'Checking print...' : printStatusError ? 'Retry print check' : !printStatus ? 'Checking print...' : printStatus.can_print ? 'Print' : printStatus.has_pending_request ? 'Request Pending' : 'Request Reprint'}</button>}
+              {canWriteInquiry && <button type="submit" disabled={loading || isReadOnly} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{loading ? 'Confirming...' : 'Confirm'}</button>}
               {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
               {canOpenConvertedOrder && (
                 <ModuleRecordAction
@@ -1901,6 +2050,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           canEditWarranty={isMasterUserAccount(currentUser)}
           captureMode={jpegCaptureMode}
           onSheetReady={handlePrintSheetReady}
+          onPrint={handlePrintNow}
           onClose={() => {
             setShowPrintPreview(false);
             setJpegCaptureMode(false);
@@ -2058,7 +2208,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                 </colgroup>
                 <thead className="bg-slate-50 dark:bg-slate-800">
                   <tr className="text-left text-slate-700 dark:text-slate-200">
-                    <th className="px-3 py-2 font-semibold">Date</th>
+                    <th className="px-3 py-2 font-semibold">Created At</th>
                     <th className="px-3 py-2 font-semibold">Customer</th>
                     <th className="px-3 py-2 font-semibold">SI No.</th>
                     <th className="px-3 py-2 font-semibold">SO No.</th>
@@ -2091,7 +2241,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                           onClick={() => void selectInquiry(inquiry)}
                           className={`cursor-pointer border-b border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 ${rowTone}`}
                         >
-                          <td className="px-3 py-2">{inquiry.sales_date ? new Date(inquiry.sales_date).toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase() : '—'}</td>
+                          <td className="px-3 py-2">{formatInquiryCreatedAt(inquiry) || '—'}</td>
                           <td className="px-3 py-2">
                             <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" title={customer?.company || '—'}>
                               {customer?.company || '—'}
@@ -2163,6 +2313,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         <div className="p-4">
           <div className="overflow-x-auto">
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
+            {selectedInquiry?.confirmed_at && <p className="mb-3 text-xs text-slate-500">Confirmed at: <time dateTime={selectedInquiry.confirmed_at}>{selectedInquiry.confirmed_at}</time></p>}
             {submitError && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-4">{submitError}</div>
             )}
@@ -2182,7 +2333,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   { label: 'Document No.', value: activeInquiryNumberDisplay },
                   { label: 'Status', value: !isCreatingNew && selectedInquiry?.status ? <StatusBadge status={selectedInquiry.status} /> : 'Draft' },
                   { label: 'Created By', value: selectedInquiry?.created_by_name || selectedInquiry?.created_by || '-' },
-                  { label: 'Created Date/Time', value: formatLegacyListDateTime(selectedInquiry?.sales_date || salesDate, selectedInquiry?.sales_time || salesTime) || '-' },
+                  { label: 'Created Date/Time', value: formatInquiryCreatedAt(selectedInquiry) || formatLegacyListDateTime(salesDate, salesTime) || '-' },
                 ]}
               />
             </div>
@@ -2736,12 +2887,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             {printableInquiry && (
               <button
                 type="button"
-                onClick={handlePrint}
+                onClick={() => { if (!printStatus) void handleRetryPrintStatus(); else void (printStatus.can_print ? handlePrint() : handleRequestReprint()); }}
+                disabled={printStatusLoading || (!printStatus && !printStatusError) || Boolean(printStatus && !printStatus.can_print && printStatus.has_pending_request)}
                 data-jpeg-export-ignore
                 className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors inline-flex items-center gap-2"
               >
                 <Printer className="w-4 h-4" />
-                Print
+                {printStatusLoading ? 'Checking print…' : printStatusError ? 'Retry print check' : !printStatus ? 'Checking print…' : printStatus.can_print ? 'Print' : printStatus.has_pending_request ? 'Request Pending' : 'Request Reprint'}
               </button>
             )}
             <button
@@ -2769,7 +2921,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
               data-jpeg-export-ignore
               className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'SAVING…' : selectedInquiry && !isCreatingNew ? 'UPDATE INQUIRY' : 'CREATE INQUIRY'}
+              {loading ? 'CONFIRMING…' : 'CONFIRM'}
             </button>
           </div>
         </div>
@@ -2786,6 +2938,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           currentMonthSales={postedSales.currentMonthSales}
           canEditWarranty={isMasterUserAccount(currentUser)}
           onClose={() => setShowPrintPreview(false)}
+          onPrint={handlePrintNow}
         />
       )}
 

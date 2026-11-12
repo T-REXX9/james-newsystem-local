@@ -1320,6 +1320,7 @@ export interface SalesInquiry {
   total_to_pay?: number;
   created_by: string;
   created_by_name?: string;
+  confirmed_at?: string;
   created_at: string;
   updated_at?: string;
   status: SalesInquiryStatus;
