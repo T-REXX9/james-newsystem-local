@@ -46,6 +46,7 @@ import { getUserFacingErrorMessage } from '../services/localApiAuth';
 import AddContactModal from './AddContactModal';
 import ModuleRecordAction from './ModuleRecordAction';
 import DailyCallCustomerDetailModal from './DailyCallCustomerDetailModal';
+import DailyCallSalesColorBreakdown from './DailyCallSalesColorBreakdown';
 import CustomerSalesReportChat from './CustomerSalesReportChat';
 import SearchableSelect from './SearchableSelect';
 import DailyCallInlineAgentSelect, { formatAssignmentDateLabel } from './DailyCallInlineAgentSelect';
@@ -1808,7 +1809,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                 )}
               </div>
             </div>
-            {activeCategory.id === 'blocked' && (
+            {category.id === 'blocked' && (
               <p className="mt-2 border-t border-red-200 pt-2 text-xs font-semibold text-red-700">View only. Contact and sales inquiry actions are disabled.</p>
             )}
             {category.id === 'unverified' && (
@@ -1963,6 +1964,11 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   />
                   Select all in list ({selectableDoNotCallRows.length})
                 </label>
+                {activeCategory.id === 'blocked' && (
+                  <div data-testid="daily-call-blocked-breakdown-placement" className="min-w-0 max-w-2xl flex-1 basis-[32rem]">
+                    <DailyCallSalesColorBreakdown compact inToolbar />
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedMasterRows.length} selected</span>
                   {selectedMasterRows.length > 0 && <button

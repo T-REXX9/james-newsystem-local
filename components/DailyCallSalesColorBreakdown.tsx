@@ -22,7 +22,7 @@ const formatMonth = (month: string) => {
   return new Date(year, monthNumber - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 };
 
-const DailyCallSalesColorBreakdown: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+const DailyCallSalesColorBreakdown: React.FC<{ compact?: boolean; inToolbar?: boolean }> = ({ compact = false, inToolbar = false }) => {
   const [data, setData] = useState<Breakdown | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -55,7 +55,7 @@ const DailyCallSalesColorBreakdown: React.FC<{ compact?: boolean }> = ({ compact
 
   if (compact) {
     return (
-      <section aria-labelledby="daily-call-blocked-customer-breakdown-compact" className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+      <section aria-labelledby="daily-call-blocked-customer-breakdown-compact" className={inToolbar ? 'rounded-lg border border-red-200 bg-white/80 px-3 py-2 dark:border-red-900 dark:bg-slate-900/70' : 'mt-3 border-t border-slate-200 pt-3 dark:border-slate-700'}>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h3 id="daily-call-blocked-customer-breakdown-compact" className="text-xs font-extrabold text-slate-800 dark:text-slate-100">Blacklisted / rejected breakdown</h3>
           {data && <p className="text-xs font-extrabold text-rose-700 dark:text-rose-300">{blockedCustomers.total.toLocaleString()} total (company-wide)</p>}
@@ -65,10 +65,10 @@ const DailyCallSalesColorBreakdown: React.FC<{ compact?: boolean }> = ({ compact
         ) : !data ? (
           <p role="status" className="mt-2 text-xs text-slate-500 dark:text-slate-400">Loading breakdown…</p>
         ) : (
-          <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
-            <div className="flex justify-between gap-2"><dt className="text-slate-600 dark:text-slate-300">Existing client</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.existing_client.toLocaleString()}</dd></div>
-            <div className="flex justify-between gap-2"><dt className="text-slate-600 dark:text-slate-300">Verified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.verified_prospective.toLocaleString()}</dd></div>
-            <div className="flex justify-between gap-2"><dt className="text-slate-600 dark:text-slate-300">Unverified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.unverified_prospective.toLocaleString()}</dd></div>
+          <dl className={inToolbar ? 'mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs' : 'mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-3'}>
+            <div className={inToolbar ? 'flex items-center gap-1.5' : 'flex justify-between gap-2'}><dt className="text-slate-600 dark:text-slate-300">Existing client</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.existing_client.toLocaleString()}</dd></div>
+            <div className={inToolbar ? 'flex items-center gap-1.5' : 'flex justify-between gap-2'}><dt className="text-slate-600 dark:text-slate-300">Verified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.verified_prospective.toLocaleString()}</dd></div>
+            <div className={inToolbar ? 'flex items-center gap-1.5' : 'flex justify-between gap-2'}><dt className="text-slate-600 dark:text-slate-300">Unverified prospective</dt><dd className="font-bold text-slate-900 dark:text-white">{blockedCustomers.unverified_prospective.toLocaleString()}</dd></div>
           </dl>
         )}
       </section>

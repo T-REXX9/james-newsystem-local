@@ -6,7 +6,7 @@ import DailyCallMasterListView from '../DailyCallMasterListView';
 import { CustomerStarProvider } from '../CustomerStarIndicator';
 import { fetchCustomerIdentifiers } from '../../services/customerIdentifierService';
 import { fetchAllCustomerRequests, requestCustomerUpdate, reviewCustomerRequest } from '../../services/customerWorkflowLocalApiService';
-import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, invalidateDailyCallMasterListCache, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../../services/dailyCallMonitoringService';
+import { createCustomerLogForDailyCall, fetchCustomersForDailyCall, fetchDailyCallMasterList, fetchDailyCallSalesColorBreakdown, invalidateDailyCallMasterListCache, sendSalesReportMessage, setDailyCallDoNotContactFlag, setDailyCallDoNotContactFlagsBulk } from '../../services/dailyCallMonitoringService';
 import { bulkUpdateContacts, updateContact, fetchSalesAgents, fetchContactById, mapApiCustomerToContact, setCustomerStarred } from '../../services/customerDatabaseLocalApiService';
 import { getVipTierConfig } from '../../services/vipTierSettingsService';
 import type { UserProfile } from '../../types';
@@ -25,6 +25,7 @@ const addToast = vi.fn();
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallMasterList: vi.fn(),
+  fetchDailyCallSalesColorBreakdown: vi.fn().mockResolvedValue(undefined),
   fetchCustomersForDailyCall: vi.fn(),
   createCustomerLogForDailyCall: vi.fn(),
   sendSalesReportMessage: vi.fn().mockResolvedValue({}),
@@ -1734,6 +1735,14 @@ describe('DailyCallMasterListView', () => {
   });
 
   it('shows category summary metrics without Average Monthly Sales on top', async () => {
+    window.history.replaceState({ __jamesDailyCallMasterList: { activeCategoryId: 'blocked' } }, '', window.location.href);
+    vi.mocked(fetchDailyCallSalesColorBreakdown).mockResolvedValue({
+      month: '2026-09',
+      company_total: 0,
+      blocked_customers: { total: 3084, existing_client: 1000, verified_prospective: 1000, unverified_prospective: 1084 },
+      agents: [],
+      unassigned: { id: '', name: 'Unassigned', customer_count: 0, sales: 0, unclassified_sales: 0, colors: {} as never },
+    });
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-09', count: 4 },
       items: [
@@ -1820,7 +1829,7 @@ describe('DailyCallMasterListView', () => {
       ],
     });
 
-    render(<DailyCallMasterListView />);
+    render(<DailyCallMasterListView currentUser={masterUser} />);
 
     const summaries = await screen.findByRole('region', { name: 'Customer category summaries' });
     expect(within(summaries).queryByText('Average Monthly Sales')).not.toBeInTheDocument();
@@ -1831,18 +1840,30 @@ describe('DailyCallMasterListView', () => {
     expect(within(priorityCard).getByText('₱1,140,000')).toBeInTheDocument();
     expect(within(priorityCard).queryByText('₱1.14M')).not.toBeInTheDocument();
     expect(within(priorityCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
+    expect(within(priorityCard).queryByText('View only. Contact and sales inquiry actions are disabled.')).not.toBeInTheDocument();
 
     const recoveryCard = within(summaries).getByRole('heading', { name: /Recovery List/i }).closest('article') as HTMLElement;
     expect(within(recoveryCard).getByText('Current Month Sales')).toBeInTheDocument();
     expect(within(recoveryCard).getByText('Monthly Sales Potential')).toBeInTheDocument();
+    expect(within(recoveryCard).queryByText('View only. Contact and sales inquiry actions are disabled.')).not.toBeInTheDocument();
 
     const verifiedCard = within(summaries).getByRole('heading', { name: /^Verified Prospects/i }).closest('article') as HTMLElement;
     expect(within(verifiedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
     expect(within(verifiedCard).getByText('Current Month Sales')).toBeInTheDocument();
+    expect(within(verifiedCard).queryByText('View only. Contact and sales inquiry actions are disabled.')).not.toBeInTheDocument();
 
     const blockedCard = within(summaries).getByRole('heading', { name: /Blacklisted\/Rejected/i }).closest('article') as HTMLElement;
     expect(within(blockedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
     expect(within(blockedCard).getByText('Current Month Sales')).toBeInTheDocument();
+    expect(within(blockedCard).getByText('View only. Contact and sales inquiry actions are disabled.')).toBeInTheDocument();
+    const blockedBreakdownPlacement = screen.getByTestId('daily-call-blocked-breakdown-placement');
+    expect(blockedBreakdownPlacement).toHaveClass('max-w-2xl');
+    expect(await within(blockedBreakdownPlacement).findByText('Blacklisted / rejected breakdown')).toBeInTheDocument();
+    expect(within(blockedBreakdownPlacement).getAllByText('1,000', { selector: 'dd' })).toHaveLength(2);
+    expect(within(blockedBreakdownPlacement).getByText('1,084', { selector: 'dd' })).toBeInTheDocument();
+    const existingClientMetric = within(blockedBreakdownPlacement).getByText('Existing client').parentElement;
+    expect(existingClientMetric).toHaveClass('gap-1.5');
+    expect(existingClientMetric).not.toHaveClass('justify-between');
   });
 
   it('moves Verified Prospects with purchase history out of the verified list into Recovery or Priority', async () => {
