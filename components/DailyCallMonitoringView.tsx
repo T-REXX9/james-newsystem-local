@@ -2427,6 +2427,7 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                   </dl>
                 )}
               </div>
+              {summary.id === 'blocked' && <DailyCallSalesColorBreakdown compact />}
             </article>
           );
         })}

@@ -35,7 +35,9 @@ vi.mock('../ToastProvider', () => ({
 
 vi.mock('../../services/dailyCallMonitoringService', () => ({
   fetchDailyCallSalesColorBreakdown: vi.fn().mockResolvedValue({
-    month: '2026-10', company_total: 0, agents: [],
+    month: '2026-10', company_total: 0,
+    blocked_customers: { total: 3084, existing_client: 1000, verified_prospective: 1000, unverified_prospective: 1084 },
+    agents: [],
     unassigned: { id: '', name: 'Unassigned', customer_count: 0, sales: 0, unclassified_sales: 0, colors: {
       green: { customer_count: 0, sales: 0 }, yellow: { customer_count: 0, sales: 0 },
       purple: { customer_count: 0, sales: 0 }, white: { customer_count: 0, sales: 0 }, red: { customer_count: 0, sales: 0 },
@@ -252,6 +254,12 @@ describe('DailyCallMonitoringView communication actions', () => {
     expect(within(screen.getByTestId('daily-call-summary-unverified')).getByText('1', { exact: true })).toBeInTheDocument();
     const blockedCard = within(screen.getByTestId('daily-call-summary-blocked'));
     expect(blockedCard.getByText(/View only · no contact or sales inquiry/i)).toBeInTheDocument();
+    expect(blockedCard.getByRole('heading', { name: 'Blacklisted / rejected breakdown' })).toBeInTheDocument();
+    expect(await blockedCard.findByText('Existing client')).toBeInTheDocument();
+    expect(blockedCard.getByText(/3,084/)).toHaveTextContent('total (company-wide)');
+    expect(blockedCard.getByText('Existing client').parentElement).toHaveTextContent('1,000');
+    expect(blockedCard.getByText('Verified prospective').parentElement).toHaveTextContent('1,000');
+    expect(blockedCard.getByText('Unverified prospective').parentElement).toHaveTextContent('1,084');
     expect(blockedCard.getByText('Current Month Sales')).toBeInTheDocument();
     expect(blockedCard.getByText('Monthly Potential Sales')).toBeInTheDocument();
     expect(blockedCard.getAllByText(/₱0/)).toHaveLength(2);
