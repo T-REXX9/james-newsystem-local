@@ -9,7 +9,7 @@ import {
 import { receivingService } from '../../services/receivingService';
 import { parseOptionalNumberInput } from '../../utils/formValidation';
 import { useToast } from '../ToastProvider';
-import { Printer, CheckCircle, Trash2, FileText, Loader2, AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { Printer, CheckCircle, Trash2, FileText, Loader2, AlertCircle, Plus, RotateCcw, Info } from 'lucide-react';
 import CustomLoadingSpinner from '../CustomLoadingSpinner';
 import RecoveryReasonModal from '../RecoveryReasonModal';
 import ModuleRecordLink from '../ModuleRecordLink';
@@ -94,6 +94,7 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
     const [incompleteDeliveryReason, setIncompleteDeliveryReason] = useState('');
     const [showHistory, setShowHistory] = useState(false);
+    const [showRecordCreatedAt, setShowRecordCreatedAt] = useState(false);
     const [recoveryAction, setRecoveryAction] = useState<'unpost' | 'delete' | null>(null);
     const [lineDrafts, setLineDrafts] = useState<Record<string, LineDraft>>({});
     const [receiveDateDraft, setReceiveDateDraft] = useState(localTodayYmd());
@@ -282,6 +283,8 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
     const totalOrdered = drafted.items?.reduce((sum, item) => sum + (item.qty_ordered || item.qty_received || 0), 0) || 0;
     const totalReceived = drafted.items?.reduce((sum, item) => sum + (item.qty_received || 0), 0) || 0;
     const remainingQty = remainingQuantityAfterReceipt(drafted);
+    const isBackdated = Boolean(rr.record_created_at && rr.receive_date
+        && rr.record_created_at.slice(0, 10) > rr.receive_date.slice(0, 10));
     const hasIncompleteDelivery = remainingQty > 0;
     const etaDate = resolvePurchaseOrderEta(
         rr.po?.order_date,
@@ -293,6 +296,14 @@ const ReceivingView: React.FC<ReceivingViewProps> = ({ rrId, onBack, onCreateNew
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-5">
                 <div className="flex items-center gap-3">
                     <h2 className="text-xl font-extrabold uppercase tracking-tight text-[#173c83]">Receiving Report: {rr.rr_no}</h2>
+                    {isBackdated && <button
+                        type="button"
+                        aria-label="Show record creation date"
+                        aria-expanded={showRecordCreatedAt}
+                        onClick={() => setShowRecordCreatedAt((visible) => !visible)}
+                        className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 print:hidden"
+                    ><Info className="h-4 w-4" /></button>}
+                    {showRecordCreatedAt && isBackdated && rr.record_created_at && <span role="status" className="text-xs font-medium text-slate-500">Record created: {formatDateTime(rr.record_created_at)}</span>}
                     <span className={`rounded-md px-3 py-1 text-sm font-bold ${statusColor}`}>{rr.status || 'Draft'}</span>
                 </div>
                 <div className="flex items-center gap-3">

@@ -37,6 +37,8 @@ export interface ReceivingReportWithDetails extends ReceivingReport {
     remaining_qty?: number;
     cycle_status?: 'Complete Delivery' | 'Incomplete Delivery' | 'Returned to Supplier';
     incomplete_delivery_reason?: string;
+    /** Local creation timestamp encoded in generated receiving references. */
+    record_created_at?: string | null;
     return_records?: Array<{ id: string; return_no: string; status?: string }>;
     po?: ReceivingReportPurchaseOrderSummary | null;
     items: ReceivingReportItemWithProduct[];

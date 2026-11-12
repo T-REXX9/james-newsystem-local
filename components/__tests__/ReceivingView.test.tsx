@@ -61,6 +61,22 @@ describe('ReceivingView', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('keeps the generated creation timestamp hidden until requested', async () => {
+    service.getReceivingReportById.mockResolvedValue({
+      ...report,
+      id: '202610061201236943467',
+      receive_date: '2024-02-14',
+      record_created_at: '2026-10-06T12:01:23',
+    });
+    const { default: ReceivingView } = await import('../ReceivingStock/ReceivingView');
+    render(<ReceivingView rrId="202610061201236943467" onBack={vi.fn()} onCreateNew={vi.fn()} />);
+
+    expect(await screen.findByText('Receiving Report: RR-2601')).toBeInTheDocument();
+    expect(screen.queryByText(/Record created:/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /show record creation date/i }));
+    expect(screen.getByRole('status')).toHaveTextContent('Record created: OCT‑06‑26 12:01 PM');
+  });
+
   it('shows ETA 30 days after the PO date when stored ETA is the 1970 sentinel', async () => {
     service.getReceivingReportById.mockResolvedValue({
       ...report,

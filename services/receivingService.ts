@@ -40,6 +40,22 @@ const toNumber = (value: unknown): number => {
     return Number.isFinite(n) ? n : 0;
 };
 
+const createdAtFromGeneratedReference = (reference: string): string | null => {
+    const match = reference.match(/^(\d{14})\d*$/);
+    if (!match) return null;
+    const timestamp = match[1];
+    const year = Number(timestamp.slice(0, 4));
+    const month = Number(timestamp.slice(4, 6));
+    const day = Number(timestamp.slice(6, 8));
+    const hour = Number(timestamp.slice(8, 10));
+    const minute = Number(timestamp.slice(10, 12));
+    const second = Number(timestamp.slice(12, 14));
+    const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day
+        || hour > 23 || minute > 59 || second > 59) return null;
+    return `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}T${timestamp.slice(8, 10)}:${timestamp.slice(10, 12)}:${timestamp.slice(12, 14)}`;
+};
+
 const getUserContext = () => {
     const session = getLocalAuthSession();
     const userId = Number(session?.context?.user?.id || 1);
@@ -209,6 +225,7 @@ const toReceivingDetail = (payload: any, purchaseOrder: Awaited<ReturnType<typeo
         warehouse_id: String(rawItems?.[0]?.warehouse_name || rawItems?.[0]?.warehouse_id || 'WH1'),
         grand_total: toNumber(summary?.total_cost ?? 0),
         status: toUiStatus(record?.status),
+        record_created_at: createdAtFromGeneratedReference(rrId),
         created_at: record?.posted_date
             ? new Date(record.posted_date).toISOString()
             : new Date().toISOString(),

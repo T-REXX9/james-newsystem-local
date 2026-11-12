@@ -124,6 +124,27 @@ describe('receivingService', () => {
     expect(detail.po?.items[0].eta_date).toBe('2026-08-20');
   });
 
+  it('derives the hidden record creation timestamp from a generated receiving reference', async () => {
+    (global.fetch as any)
+      .mockImplementationOnce(() => okResponse({
+        record: {
+          refno: '202610061201236943467',
+          rr_number: 'RR-26428',
+          receive_date: '2024-02-14',
+          status: 'Delivered',
+          posted_date: '2026-10-06',
+        },
+        items: [],
+        summary: {},
+      }))
+      .mockImplementationOnce(() => okResponse({ order: {}, items: [], summary: {} }));
+
+    const { receivingService } = await import('../receivingService');
+    const detail = await receivingService.getReceivingReportById('202610061201236943467');
+
+    expect(detail.record_created_at).toBe('2026-10-06T12:01:23');
+  });
+
   it('loads only server-approved posted POs with remaining lines', async () => {
     (global.fetch as any).mockImplementation(() => okResponse([{
       refno: 'po-ref', po_number: 'PO-2601', pr_number: 'PR-2601', supplier_id: '9',
