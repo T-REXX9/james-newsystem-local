@@ -8,23 +8,11 @@ import { fetchAccessGroups } from '../services/accessGroupApiService';
 import { ROLE_DEFAULT_ACCESS_RIGHTS } from '../constants';
 import { ToastProvider } from './ToastProvider';
 import { ACCESS_MODULES, expandAccessModule } from '../utils/accessModules';
-import { getLocalAuthSession } from '../services/localAuthService';
-import { listSalesInquiryPrintRequests, reviewSalesInquiryPrintRequest } from '../services/salesInquiryLocalApiService';
 
 vi.mock('../services/accessLocalApiService', () => ({
   fetchProfilesLocal: vi.fn(),
   updateProfileLocal: vi.fn(),
   createStaffAccountLocal: vi.fn(),
-}));
-
-vi.mock('../services/localAuthService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/localAuthService')>();
-  return { ...actual, getLocalAuthSession: vi.fn() };
-});
-
-vi.mock('../services/salesInquiryLocalApiService', () => ({
-  listSalesInquiryPrintRequests: vi.fn(),
-  reviewSalesInquiryPrintRequest: vi.fn(),
 }));
 
 vi.mock('../services/accessGroupApiService', () => ({
@@ -40,27 +28,23 @@ const fetchProfilesMock = fetchProfilesLocal as unknown as ReturnType<typeof vi.
 const createStaffAccountMock = createStaffAccountLocal as unknown as ReturnType<typeof vi.fn>;
 const updateProfileMock = updateProfileLocal as unknown as ReturnType<typeof vi.fn>;
 const fetchAccessGroupsMock = fetchAccessGroups as unknown as ReturnType<typeof vi.fn>;
-const listPrintRequestsMock = listSalesInquiryPrintRequests as unknown as ReturnType<typeof vi.fn>;
-const reviewPrintRequestMock = reviewSalesInquiryPrintRequest as unknown as ReturnType<typeof vi.fn>;
 
 const renderWithProviders = (ui: React.ReactElement) =>
   render(<ToastProvider>{ui}</ToastProvider>);
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(getLocalAuthSession).mockReturnValue({ userProfile: { user_type: 1 } } as any);
   fetchProfilesMock.mockResolvedValue({
     items: [],
     meta: { page: 1, per_page: 50, total: 0, total_pages: 1 },
   });
+  fetchAccessGroupsMock.mockResolvedValue([]);
   fetchAccessGroupsMock.mockResolvedValue([
     { id: '2', name: 'Sales Agent', access_rights: [], description: '' },
     { id: '3', name: 'Accountant', access_rights: [], description: '' },
     { id: '4', name: 'Warehouse Personnel', access_rights: [], description: '' },
     { id: '9', name: 'Company Owner', access_rights: [], description: '' },
   ]);
-  listPrintRequestsMock.mockResolvedValue([]);
-  reviewPrintRequestMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -69,35 +53,6 @@ afterEach(() => {
 });
 
 describe('AccessControlSettings - create staff account', () => {
-  it('hides the Master-only reprint queue from regular staff', () => {
-    vi.mocked(getLocalAuthSession).mockReturnValue({ userProfile: { user_type: 2, role: 'Sales Agent' } } as any);
-    renderWithProviders(<AccessControlSettings />);
-    expect(screen.queryByRole('button', { name: /reprint requests/i })).toBeNull();
-    expect(listPrintRequestsMock).not.toHaveBeenCalled();
-  });
-
-  it('lets the Master User approve a staff member reprint request in System Access', async () => {
-    const user = userEvent.setup();
-    listPrintRequestsMock.mockResolvedValue([{
-      id: 25,
-      inquiry_refno: '261112062925689417412663',
-      inquiry_no: 'INQ26-25',
-      requested_by: 4,
-      requested_by_name: 'Staff Member',
-      requested_at: '2026-09-25 10:00:00',
-    }]);
-    renderWithProviders(<AccessControlSettings />);
-
-    await user.click(await screen.findByRole('button', { name: /reprint requests/i }));
-    expect(await screen.findByText('Inquiry INQ26-25')).toBeInTheDocument();
-    expect(screen.queryByText(/261112062925689417412663/)).toBeNull();
-    expect(screen.getByText(/Staff Member/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Approve' }));
-
-    await waitFor(() => expect(reviewPrintRequestMock).toHaveBeenCalledWith(25, 'approved'));
-    expect(screen.getByText('No pending reprint requests.')).toBeInTheDocument();
-  });
-
   it('saves edited staff permissions through the profile update API', async () => {
     const user = userEvent.setup();
     const homePages = expandAccessModule('home');

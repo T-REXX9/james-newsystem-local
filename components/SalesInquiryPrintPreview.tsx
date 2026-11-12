@@ -16,7 +16,6 @@ interface SalesInquiryPrintPreviewProps {
   vipConfig?: VipTierConfig;
   currentMonthSales?: number | null;
   onClose: () => void;
-  onPrint?: () => void | Promise<void>;
   /** When true, hide preview chrome and mount off-screen for JPEG capture. */
   captureMode?: boolean;
   onSheetReady?: (sheet: HTMLElement) => void;
@@ -253,6 +252,13 @@ const formatDate = (value?: string | null): string => {
   return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
 };
 
+const formatDateTime = (value?: string | null): string => {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return formatDisplayDateTime(parsed);
+};
+
 const formatInquiryDateTime = (dateValue?: string | null, timeValue?: string | null): string => {
   const dateLabel = formatDate(dateValue);
   const timeLabel = String(timeValue || '').slice(0, 5);
@@ -267,14 +273,12 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   vipConfig = DEFAULT_VIP_TIER_CONFIG,
   currentMonthSales,
   onClose,
-  onPrint,
   captureMode = false,
   onSheetReady,
   canEditWarranty = false,
 }) => {
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const [warrantyText, setWarrantyText] = useState(DEFAULT_WARRANTY_TEXT);
-  const [preparedAt, setPreparedAt] = useState(() => new Date());
   const lineItems = inquiry.items || [];
   const totalAmount = lineItems.reduce(
     (sum, item) => sum + Number(item.amount || Number(item.qty || 0) * Number(item.unit_price || 0)),
@@ -297,15 +301,6 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
   const goldQualificationLabel = goldQualified
     ? 'QUALIFIED'
     : `${formatPeso(vipTargets.unlimited_discount_threshold - vipProgress)} MORE NEEDED THIS MONTH`;
-
-  const handlePrintNow = async () => {
-    setPreparedAt(new Date());
-    if (onPrint) {
-      await onPrint();
-      return;
-    }
-    window.print();
-  };
 
   useEffect(() => {
     if (!captureMode || !onSheetReady) return;
@@ -339,7 +334,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => { void handlePrintNow(); }}
+                onClick={() => window.print()}
                 className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-medium text-white"
               >
                 <Printer className="h-4 w-4" />
@@ -413,7 +408,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
                 <td className="sales-inquiry-label">Our Reference:</td>
                 <td><b>{inquiryNumberLabel || inquiry.inquiry_no || '-'}</b></td>
                 <td className="sales-inquiry-label">Date/Time:</td>
-                <td><b>{inquiry.confirmed_at ? formatInquiryDateTime(inquiry.confirmed_at.slice(0, 10), inquiry.confirmed_at.slice(11, 16)) : formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time)}</b></td>
+                <td><b>{formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time)}</b></td>
               </tr>
               <tr>
                 <td className="sales-inquiry-label">Terms Strictly:</td>
@@ -541,7 +536,7 @@ const SalesInquiryPrintPreview: React.FC<SalesInquiryPrintPreviewProps> = ({
 
           <div className="sales-inquiry-prepared">
             <b>Prepared By :</b> {preparedBy || inquiry.sales_person || '-'}{' '}
-            <b>Date/Time :</b> {formatDisplayDateTime(preparedAt)}
+            <b>Date/Time :</b> {formatInquiryDateTime(inquiry.sales_date || inquiry.created_at, inquiry.sales_time) || formatDateTime(inquiry.created_at)}
           </div>
         </div>
       </div>

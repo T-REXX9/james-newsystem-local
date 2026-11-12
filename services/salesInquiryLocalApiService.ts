@@ -100,8 +100,7 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     ...readPersistedVip(row),
     created_by: String(row?.created_by || ''),
     created_by_name: String(row?.created_by_name || ''),
-    confirmed_at: String(row?.confirmed_at || ''),
-    created_at: String(row?.confirmed_at || [row?.sales_date, row?.sales_time].filter(Boolean).join(' ')),
+    created_at: [row?.sales_date, row?.sales_time].filter(Boolean).join(' '),
     updated_at: undefined,
     status: mapApiStatusToUi(row?.status),
     is_deleted: toNumber(row?.is_cancelled, 0) > 0,
@@ -163,7 +162,7 @@ const buildInquiryPayload = (dto: SalesInquiryDTO) => {
   };
 };
 
-export const createSalesInquiry = async (data: SalesInquiryDTO, options?: { keepalive?: boolean }): Promise<SalesInquiry> => {
+export const createSalesInquiry = async (data: SalesInquiryDTO): Promise<SalesInquiry> => {
   if (!data.items || data.items.length === 0) {
     throw new Error('Please add at least one line item before saving the inquiry.');
   }
@@ -173,13 +172,12 @@ export const createSalesInquiry = async (data: SalesInquiryDTO, options?: { keep
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    keepalive: options?.keepalive,
   });
 
   return mapApiInquiry(created);
 };
 
-export const updateSalesInquiry = async (id: string, data: SalesInquiryDTO, options?: { keepalive?: boolean }): Promise<SalesInquiry> => {
+export const updateSalesInquiry = async (id: string, data: SalesInquiryDTO): Promise<SalesInquiry> => {
   if (!data.items || data.items.length === 0) {
     throw new Error('Please add at least one line item before saving the inquiry.');
   }
@@ -193,7 +191,6 @@ export const updateSalesInquiry = async (id: string, data: SalesInquiryDTO, opti
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    keepalive: options?.keepalive,
   });
 
   return mapApiInquiry(updated);
@@ -311,48 +308,4 @@ export const deleteSalesInquiry = async (id: string): Promise<boolean> => {
     { method: 'DELETE' }
   );
   return true;
-};
-
-export const confirmSalesInquiry = async (id: string, options?: { keepalive?: boolean }): Promise<{ confirmed_at: string }> => {
-  const result = await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/confirm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ main_id: API_MAIN_ID }),
-    keepalive: options?.keepalive,
-  });
-  if (!result?.confirmed_at) throw new Error('The inquiry confirmation time was not returned by the server.');
-  return { confirmed_at: String(result.confirmed_at) };
-};
-
-export const getSalesInquiryPrintStatus = async (id: string): Promise<{ can_print: boolean; print_count: number; has_pending_request?: boolean }> =>
-  requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/print-status`);
-
-export const recordSalesInquiryPrint = async (id: string): Promise<void> => {
-  await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/print`, { method: 'POST' });
-};
-
-export const requestSalesInquiryReprint = async (id: string): Promise<void> => {
-  await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/print-request`, { method: 'POST' });
-};
-
-export interface SalesInquiryPrintRequest {
-  id: number;
-  inquiry_refno: string;
-  inquiry_no: string;
-  requested_by: number;
-  requested_by_name?: string;
-  requested_at: string;
-}
-
-export const listSalesInquiryPrintRequests = async (): Promise<SalesInquiryPrintRequest[]> => {
-  const result = await requestApi(`${API_BASE_URL}/sales-inquiry-print-requests`);
-  return Array.isArray(result?.items) ? result.items : [];
-};
-
-export const reviewSalesInquiryPrintRequest = async (requestId: number, decision: 'approved' | 'rejected'): Promise<void> => {
-  await requestApi(`${API_BASE_URL}/sales-inquiry-print-requests/${requestId}/review`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ decision }),
-  });
 };

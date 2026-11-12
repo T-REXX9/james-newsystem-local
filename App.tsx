@@ -53,7 +53,6 @@ import AccountsReceivableView from './components/AccountsReceivableView';
 import FreightChargesDebitView from './components/FreightChargesDebitView';
 import FreightChargesReportView from './components/FreightChargesReportView';
 import SalesReturnReport from './components/SalesReturnReport';
-
 import SalesReturnPage from './components/SalesReturnPage';
 import PurchaseHistoryReportView from './components/PurchaseHistoryReportView';
 import InactiveActiveCustomersReport from './components/InactiveActiveCustomersReport';
@@ -97,20 +96,6 @@ import {
   logoutFromLocalApi,
   restoreLocalAuthSession,
 } from './services/localAuthService';
-
-const waitForSalesInquiryConfirmation = async (currentTab: string, targetTab: string): Promise<boolean> => {
-  const canonicalCurrentTab = normalizeModuleId(currentTab);
-  const canonicalTargetTab = normalizeModuleId(targetTab);
-  if (canonicalCurrentTab !== 'sales-transaction-sales-inquiry' || canonicalTargetTab === canonicalCurrentTab) return true;
-
-  const pending: Promise<boolean>[] = [];
-  window.dispatchEvent(new CustomEvent('sales-inquiry:before-navigation', {
-    detail: { targetTab: canonicalTargetTab, waitUntil: (promise: Promise<boolean>) => pending.push(promise) },
-  }));
-  if (!pending.length) return true;
-  const results = await Promise.all(pending);
-  return results.every(Boolean);
-};
 
 const CANONICAL_TO_ALIASES: Record<string, string[]> = Object.entries(MODULE_ID_ALIASES).reduce(
   (acc, [alias, canonical]) => {
@@ -198,10 +183,6 @@ const App: React.FC = () => {
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(
     initialRouteState.payload ? { [initialRouteState.tab]: initialRouteState.payload } : {}
   );
-  const activeTabRef = useRef(activeTab);
-  const moduleContextRef = useRef(moduleContext);
-  activeTabRef.current = activeTab;
-  moduleContextRef.current = moduleContext;
 
   const applyLocalAuthSession = (authSession: LocalAuthSession | null) => {
     currentSessionRef.current = authSession;
@@ -266,11 +247,10 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const handler = async (event: Event) => {
+    const handler = (event: Event) => {
       const customEvent = event as CustomEvent<WorkflowNavigateDetail>;
       if (!customEvent.detail?.tab) return;
       const canonicalTab = normalizeModuleId(customEvent.detail.tab);
-      if (!(await waitForSalesInquiryConfirmation(activeTabRef.current, canonicalTab))) return;
       const payload = compactWorkflowPayload(customEvent.detail.payload);
       const mode = customEvent.detail.mode === 'replace' ? 'replace' : 'push';
       setModuleContext((prev) => ({
@@ -287,13 +267,8 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const syncFromLocation = async () => {
+    const syncFromLocation = () => {
       const routeState = getRouteStateFromLocation();
-      if (!(await waitForSalesInquiryConfirmation(activeTabRef.current, routeState.tab))) {
-        const currentTab = activeTabRef.current;
-        writeRouteStateToLocation(currentTab, moduleContextRef.current[currentTab], 'replace');
-        return;
-      }
       setActiveTab(routeState.tab);
       setModuleContext((prev) => ({
         ...prev,
@@ -318,8 +293,7 @@ const App: React.FC = () => {
     await logoutFromLocalApi();
   };
 
-  const handleSetActiveTab = async (tab: string) => {
-    if (!(await waitForSalesInquiryConfirmation(activeTabRef.current, tab))) return;
+  const handleSetActiveTab = (tab: string) => {
     const canonicalTab = normalizeModuleId(tab);
     setModuleContext((prev) => ({ ...prev, [canonicalTab]: {} }));
     setActiveTab(canonicalTab);
@@ -782,9 +756,8 @@ const App: React.FC = () => {
         );
       case 'operations-management-dashboard':
         if (!isMasterUserAccount(userProfile)) return renderAccessDenied();
-        return <OperationsDashboard onNavigate={async (tab, payload) => {
+        return <OperationsDashboard onNavigate={(tab, payload) => {
           const canonicalTab = normalizeModuleId(tab);
-          if (!(await waitForSalesInquiryConfirmation(activeTabRef.current, canonicalTab))) return;
           setModuleContext((prev) => ({ ...prev, [canonicalTab]: payload || {} }));
           setActiveTab(canonicalTab);
           writeRouteStateToLocation(canonicalTab, payload, 'push');
@@ -820,9 +793,8 @@ const App: React.FC = () => {
         return (
           <div className="h-full overflow-y-auto">
             <SalesMap
-              onCustomerSelect={async (id) => {
+              onCustomerSelect={(id) => {
                 const targetTab = 'sales-database-customer-database';
-                if (!(await waitForSalesInquiryConfirmation(activeTabRef.current, targetTab))) return;
                 setModuleContext((prev) => ({ ...prev, [targetTab]: { contactId: id } }));
                 setActiveTab(targetTab);
                 writeRouteStateToLocation(targetTab, { contactId: id }, 'push');
