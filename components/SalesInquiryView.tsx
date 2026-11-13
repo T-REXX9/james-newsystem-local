@@ -190,6 +190,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   today,
 }) => {
   const { addToast } = useToast();
+  const authSession = getLocalAuthSession();
+  const currentUser = authSession?.userProfile || null;
+  const authUserId = String(authSession?.context?.user?.id || currentUser?.id || '');
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
@@ -352,7 +355,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         .finally(() => { if (active) setPrintStatusLoading(false); });
     }
     return () => { active = false; };
-  }, [selectedInquiry?.id, isCreatingNew]);
+  }, [selectedInquiry?.id, isCreatingNew, authUserId]);
 
   const handleRetryPrintStatus = async () => {
     if (!selectedInquiry?.id) return;
@@ -370,7 +373,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
-  const currentUser = getLocalAuthSession()?.userProfile || null;
   const isMasterUser = isMasterUserType(currentUser);
 
   useEffect(() => {

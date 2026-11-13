@@ -456,6 +456,29 @@ describe('SalesInquiryView', () => {
     expect(printSpy).toHaveBeenCalledTimes(1);
   });
 
+  it('reloads the print quota when the signed-in staff account changes', async () => {
+    const inquiry = makeInquiry({ items: [{ id: 'item-1', inquiry_id: 'inq-1', item_id: 'p-1', qty: 1, part_no: 'PN-1', item_code: 'IC-1', location: '', description: 'Widget', unit_price: 100, amount: 100, approval_status: 'approved' }] });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+    getSalesInquiryPrintStatusMock
+      .mockResolvedValueOnce({ can_print: false, print_count: 1 })
+      .mockResolvedValueOnce({ can_print: true, print_count: 0 });
+    const view = render(<SalesInquiryView initialInquiryId="inq-1" />);
+    await screen.findAllByDisplayValue('INQ26-1');
+    await waitFor(() => expect(getSalesInquiryPrintStatusMock).toHaveBeenCalledTimes(1));
+
+    const { getLocalAuthSession } = await import('../../services/localAuthService');
+    vi.mocked(getLocalAuthSession).mockReturnValue({
+      context: { user: { id: 65 } },
+      userProfile: { id: '65', role: 'Sales Agent', full_name: 'second staff' },
+    } as any);
+    view.rerender(<SalesInquiryView initialInquiryId="inq-1" />);
+
+    await waitFor(() => expect(getSalesInquiryPrintStatusMock).toHaveBeenCalledTimes(2));
+    expect(getSalesInquiryPrintStatusMock).toHaveBeenLastCalledWith('inq-1');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Print' }).length).toBeGreaterThan(0));
+  });
+
   it('requires System Access Approve before generating from a draft inquiry', () => {
     expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.DRAFT, so_refno: '' }, true, false, false, false)).toBe(false);
     expect(canGenerateSalesOrderFromInquiry({ status: SalesInquiryStatus.DRAFT, so_refno: '' }, true, false, false, true)).toBe(true);
