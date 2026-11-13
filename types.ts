@@ -1333,6 +1333,10 @@ export interface SalesInquiry {
   invoice_no?: string;
   dr_no?: string;
   is_editable?: boolean;
+  replacement_of_refno?: string;
+  replaced_by_refno?: string;
+  replacement_of_inquiry_no?: string;
+  replaced_by_inquiry_no?: string;
 }
 
 export interface InquiryReportFilters {
@@ -1373,6 +1377,7 @@ export interface SalesInquiryDTO {
   vip_percentage?: number;
   vip_discount_amount?: number;
   total_to_pay?: number;
+  replacement_of_refno?: string;
   items: Omit<SalesInquiryItem, 'id' | 'inquiry_id'>[];
 }
 

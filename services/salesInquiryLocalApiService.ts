@@ -112,6 +112,10 @@ const mapApiInquiry = (row: any): SalesInquiry => {
     invoice_no: String(row?.invoice_no || ''),
     dr_no: String(row?.dr_no || ''),
     is_editable: toNumber(row?.is_editable, 1) > 0,
+    replacement_of_refno: String(row?.replacement_of_refno || ''),
+    replaced_by_refno: String(row?.replaced_by_refno || ''),
+    replacement_of_inquiry_no: String(row?.replacement_of_inquiry_no || ''),
+    replaced_by_inquiry_no: String(row?.replaced_by_inquiry_no || ''),
   };
 };
 
@@ -176,6 +180,17 @@ export const createSalesInquiry = async (data: SalesInquiryDTO, options?: { keep
     keepalive: options?.keepalive,
   });
 
+  return mapApiInquiry(created);
+};
+
+export const replaceSalesInquiry = async (sourceId: string, data: SalesInquiryDTO): Promise<SalesInquiry> => {
+  if (!data.items || data.items.length === 0) throw new Error('Please add at least one line item before replacing the inquiry.');
+  const payload = buildInquiryPayload(data);
+  const created = await requestApi(`${API_BASE_URL}/sales-inquiries/${encodeURIComponent(sourceId)}/replace`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
   return mapApiInquiry(created);
 };
 

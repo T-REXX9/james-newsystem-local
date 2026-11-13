@@ -1,9 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmSalesInquiry, getSalesInquiry, getSalesInquiryEditAccess, getSalesInquiryPrintStatus, listSalesInquiryEditRequests, listSalesInquiryPrintRequests, recordSalesInquiryPrint, requestSalesInquiryEditAccess, requestSalesInquiryReprint, reviewSalesInquiryEditRequest, reviewSalesInquiryPrintRequest } from '../salesInquiryLocalApiService';
+import { confirmSalesInquiry, getSalesInquiry, getSalesInquiryEditAccess, getSalesInquiryPrintStatus, listSalesInquiryEditRequests, listSalesInquiryPrintRequests, recordSalesInquiryPrint, replaceSalesInquiry, requestSalesInquiryEditAccess, requestSalesInquiryReprint, reviewSalesInquiryEditRequest, reviewSalesInquiryPrintRequest } from '../salesInquiryLocalApiService';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('salesInquiryLocalApiService', () => {
+  it('submits replacement data to the atomic replace endpoint', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true, data: {
+      inquiry_refno: 'INQ-NEW', inquiry_no: 'INQ26-2', contact_id: 'C1', sales_date: '2026-11-13',
+      sales_time: '09:00:00', status: 'Pending', confirmed_at: '2026-11-13 09:00:00',
+      replacement_of_refno: 'INQ-OLD', replaced_by_refno: '', items: [],
+    } })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(replaceSalesInquiry('INQ-OLD', {
+      contact_id: 'C1', sales_date: '2026-11-13', sales_time: '09:00:00', sales_person: '',
+      delivery_address: '', reference_no: '', customer_reference: '', send_by: '', price_group: '',
+      credit_limit: 0, terms: '', promise_to_pay: '', po_number: '', inquiry_type: 'General',
+      urgency: 'N/A', items: [{ item_id: 'P1', qty: 1, part_no: 'P1', item_code: '', location: '', description: 'Part', unit_price: 10, amount: 10, approval_status: 'approved' }],
+    })).resolves.toMatchObject({ id: 'INQ-NEW', replacement_of_refno: 'INQ-OLD' });
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/v1/sales-inquiries/INQ-OLD/replace');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ contact_id: 'C1', items: [{ item_id: 'P1' }] });
+  });
+
   it('uses the server confirmation timestamp as the inquiry creation timestamp', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ok: true,

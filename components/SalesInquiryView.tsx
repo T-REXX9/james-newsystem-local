@@ -32,6 +32,7 @@ import {
   approveInquiry,
   convertToOrder,
   createSalesInquiry,
+  replaceSalesInquiry,
   deleteSalesInquiry,
   getSalesInquiry,
   getAllSalesInquiries,
@@ -218,6 +219,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [filterYear, setFilterYear] = useState(initialFilterYear || String(new Date().getFullYear()));
   const [dateFilterApplied, setDateFilterApplied] = useState(Boolean(initialDateFilterApplied));
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [replacementSourceId, setReplacementSourceId] = useState<string | null>(null);
   const [clearedRouteInquiryId, setClearedRouteInquiryId] = useState<string | null>(null);
   const [loadedSnapshot, setLoadedSnapshot] = useState<LoadedFormSnapshot | null>(null);
 
@@ -868,6 +870,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const startNewInquiry = useCallback(() => {
     if (!canAdd || pendingCreateConfirmationId) return;
+    setReplacementSourceId(null);
     setIsCreatingNew(true);
     setClearedRouteInquiryId(initialInquiryId || null);
     setSelectedInquiry(null);
@@ -886,6 +889,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, [initialInquiryId, isCreatingNew, resetFormForNew]);
 
   const selectInquiry = useCallback(async (inquiry: SalesInquiry) => {
+    setReplacementSourceId(null);
     setIsCreatingNew(false);
     setClearedRouteInquiryId(null);
     const detailed = await getSalesInquiry(inquiry.id);
@@ -893,6 +897,23 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     setSelectedInquiry(selected);
     loadInquiryIntoForm(selected);
   }, [loadInquiryIntoForm]);
+
+  const handleStartReplacement = useCallback(async (inquiry: SalesInquiry) => {
+    if (!canAdd || !inquiry.confirmed_at || inquiry.status === SalesInquiryStatus.CANCELLED || inquiry.so_refno || inquiry.replaced_by_refno) return;
+    try {
+      const source = await getSalesInquiry(inquiry.id);
+      if (!source) throw new Error('Unable to load the inquiry to repeat.');
+      setIsCreatingNew(true);
+      setReplacementSourceId(source.id);
+      setSelectedInquiry(null);
+      setClearedRouteInquiryId(initialInquiryId || null);
+      loadInquiryIntoForm({ ...source, sales_date: getLocalDateInputValue(), sales_time: getLocalTimeInputValue() });
+      navigateWorkflow(SALES_INQUIRY_TAB_ID);
+      addToast({ type: 'info', title: 'Linked inquiry copy', description: 'Review the copied details, then confirm to create the linked inquiry. The original will remain active.' });
+    } catch (error) {
+      addToast({ type: 'error', title: 'Unable to copy inquiry', description: error instanceof Error ? error.message : 'Please try again.' });
+    }
+  }, [addToast, canAdd, initialInquiryId, loadInquiryIntoForm]);
 
   const selectInquiryAndSync = useCallback((inquiry: SalesInquiry) => {
     void selectInquiry(inquiry);
@@ -1128,7 +1149,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       id: selectedInquiry?.id || 'new-inquiry',
       kind: 'sales_inquiry',
       salesDate,
-      cancelled: selectedInquiry?.status === SalesInquiryStatus.CANCELLED,
+      cancelled: selectedInquiry?.status === SalesInquiryStatus.CANCELLED || Boolean(selectedInquiry?.replaced_by_refno),
       deleted: Boolean(selectedInquiry?.is_deleted),
     };
     const monthKey = benefitMonthKey(salesDate);
@@ -1141,7 +1162,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         id: inquiry.id,
         kind: 'sales_inquiry' as const,
         salesDate: inquiry.sales_date,
-        cancelled: inquiry.status === SalesInquiryStatus.CANCELLED,
+        cancelled: inquiry.status === SalesInquiryStatus.CANCELLED || Boolean(inquiry.replaced_by_refno) || inquiry.id === replacementSourceId,
         deleted: Boolean(inquiry.is_deleted),
       }));
 
@@ -1314,6 +1335,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         urgency: urgency,
         urgency_date: urgency !== 'N/A' ? urgencyDate : undefined,
         status: selectedInquiry && !isCreatingNew ? selectedInquiry.status : SalesInquiryStatus.DRAFT,
+        ...(replacementSourceId ? { replacement_of_refno: replacementSourceId } : {}),
         ...toVipSavePayload(vipDiscount),
         items: items.map(({ tempId, isManual, ...rest }) => ({
           ...rest,
@@ -1360,6 +1382,17 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
         setSelectedInquiry(finalInquiry);
         loadInquiryIntoForm(finalInquiry);
+        return true;
+      }
+
+      if (replacementSourceId) {
+        const replacement = await replaceSalesInquiry(replacementSourceId, inquiryData);
+        await refetchInquiries();
+        setReplacementSourceId(null);
+        setIsCreatingNew(false);
+        setSelectedInquiry(replacement);
+        loadInquiryIntoForm(replacement);
+        addToast({ type: 'success', title: 'Linked inquiry copy created', description: `${replacement.inquiry_no} is linked to ${replacementSourceId}. The original remains active.` });
         return true;
       }
 
@@ -1984,11 +2017,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                     return <tr key={inquiry.id} onClick={() => selectInquiryAndSync(inquiry)} className={`cursor-pointer hover:bg-[#f7f7f7] ${rowColor}`}>
                       <td className="border border-[#d7d7d7] px-2 py-[9px]">{formatInquiryCreatedAt(inquiry)}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate" title={customer?.company || ''}>{customer?.company || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="push" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink> <Copy className="ml-1 inline h-3.5 w-3.5 text-[#337ab7]" /></td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]"><ModuleRecordLink tab="sales-transaction-sales-inquiry" payload={{ inquiryId: inquiry.id }} mode="push" onOpen={() => void selectInquiry(inquiry)} className="underline">{formatInquiryDisplayNo(inquiry.inquiry_no)}</ModuleRecordLink>{canAdd && inquiry.confirmed_at && inquiry.status !== SalesInquiryStatus.CANCELLED && !inquiry.so_refno && !inquiry.replaced_by_refno && <button type="button" aria-label={`Copy inquiry ${formatInquiryDisplayNo(inquiry.inquiry_no)}`} title="Repeat SI (linked copy)" onClick={(event) => { event.stopPropagation(); void handleStartReplacement(inquiry); }} className="ml-1 inline-flex rounded p-1 text-[#337ab7] hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"><Copy aria-hidden="true" className="h-3.5 w-3.5" /></button>}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.so_refno ? <ModuleRecordAction tab="sales-transaction-sales-order" payload={{ orderId: inquiry.so_refno }} className="underline" newWindowLabel="Open sales order in new window">{inquiry.so_no || inquiry.so_refno}</ModuleRecordAction> : (inquiry.so_no || '')}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] underline">{inquiry.invoice_no || inquiry.dr_no || ''}</td>
                       <td className="border border-[#d7d7d7] px-2 py-[9px] truncate">{inquiry.sales_person || ''}</td>
-                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{inquiry.status}</td>
+                      <td className="border border-[#d7d7d7] px-2 py-[9px]">{inquiry.status}{inquiry.replacement_of_inquiry_no && <div className="text-[11px] text-[#666]" title={`Copied from ${inquiry.replacement_of_inquiry_no}`}>Copy of {inquiry.replacement_of_inquiry_no}</div>}{inquiry.replaced_by_inquiry_no && <div className="text-[11px] text-[#666]" title={`Copied as ${inquiry.replaced_by_inquiry_no}`}>Copied as {inquiry.replaced_by_inquiry_no}</div>}</td>
                     </tr>;
                   })}
                 </tbody>

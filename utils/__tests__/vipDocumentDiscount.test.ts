@@ -108,6 +108,16 @@ describe('shouldApplyVipOnDocument', () => {
       })
     ).toBe(true);
   });
+
+  it('lets a linked replacement inherit Silver eligibility after its source is retired', () => {
+    const source = inquiry({ id: 'inq-original', cancelled: true, salesDate: '2026-09-01' });
+    const replacement = inquiry({ id: 'inq-replacement', salesDate: '2026-09-08' });
+    expect(shouldApplyVipOnDocument({
+      standing: 'silver',
+      current: replacement,
+      customerDocumentsInBenefitMonth: [source, replacement],
+    })).toBe(true);
+  });
 });
 
 describe('lastMonthSpendFromSummary', () => {

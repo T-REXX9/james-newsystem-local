@@ -56,6 +56,7 @@ vi.mock('../../services/dailyCallMonitoringService', async (importOriginal) => {
 
 vi.mock('../../services/salesInquiryLocalApiService', () => ({
   createSalesInquiry: (...args: any[]) => createSalesInquiryMock(...args),
+  replaceSalesInquiry: vi.fn(),
   getAllSalesInquiries: (...args: any[]) => getAllSalesInquiriesMock(...args),
   approveInquiry: (...args: any[]) => approveInquiryMock(...args),
   convertToOrder: (...args: any[]) => convertToOrderMock(...args),
