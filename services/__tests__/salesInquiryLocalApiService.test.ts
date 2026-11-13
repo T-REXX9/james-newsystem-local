@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmSalesInquiry, getSalesInquiry, getSalesInquiryEditAccess, getSalesInquiryPrintStatus, listSalesInquiryEditRequests, listSalesInquiryPrintRequests, recordSalesInquiryPrint, replaceSalesInquiry, requestSalesInquiryEditAccess, requestSalesInquiryReprint, reviewSalesInquiryEditRequest, reviewSalesInquiryPrintRequest } from '../salesInquiryLocalApiService';
+import { confirmSalesInquiry, getSalesInquiry, replaceSalesInquiry } from '../salesInquiryLocalApiService';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -40,21 +40,6 @@ describe('salesInquiryLocalApiService', () => {
     }));
   });
 
-  it('uses the print API endpoints to read status, record a print, and request a reprint', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true, data: { can_print: true, print_count: 0 } })));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(getSalesInquiryPrintStatus('INQ-1')).resolves.toEqual({ can_print: true, print_count: 0 });
-    await recordSalesInquiryPrint('INQ-1');
-    await requestSalesInquiryReprint('INQ-1');
-
-    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init?.method || 'GET'])).toEqual([
-      ['/api/v1/sales-inquiries/INQ-1/print-status', 'GET'],
-      ['/api/v1/sales-inquiries/INQ-1/print', 'POST'],
-      ['/api/v1/sales-inquiries/INQ-1/print-request', 'POST'],
-    ]);
-  });
-
   it('keeps the customer agent and inquiry creator as separate values', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       ok: true,
@@ -79,20 +64,6 @@ describe('salesInquiryLocalApiService', () => {
     }));
   });
 
-  it('exposes master review endpoints for pending reprint requests', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { items: [{ id: 9, inquiry_refno: '261112062925689417412663', inquiry_no: 'INQ26-1', requested_by: 4, requested_by_name: 'Staff A', requested_at: '2026-09-25 10:00:00' }] } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { reviewed: true, status: 'approved' } })));
-    vi.stubGlobal('fetch', fetchMock);
-    await expect(listSalesInquiryPrintRequests()).resolves.toEqual([{ id: 9, inquiry_refno: '261112062925689417412663', inquiry_no: 'INQ26-1', requested_by: 4, requested_by_name: 'Staff A', requested_at: '2026-09-25 10:00:00' }]);
-    await reviewSalesInquiryPrintRequest(9, 'approved');
-    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init?.method || 'GET'])).toEqual([
-      ['/api/v1/sales-inquiry-print-requests', 'GET'],
-      ['/api/v1/sales-inquiry-print-requests/9/review', 'POST'],
-    ]);
-    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ decision: 'approved' });
-  });
-
   it('confirms an inquiry through the timestamp endpoint and supports exit-safe requests', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true, data: { confirmed: true, confirmed_at: '2026-09-25 10:00:00' } })));
     vi.stubGlobal('fetch', fetchMock);
@@ -102,25 +73,5 @@ describe('salesInquiryLocalApiService', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ permission_action: 'add' });
   });
 
-  it('supports inquiry-specific edit access requests and Master User decisions', async () => {
-    const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { confirmed: true, can_edit: false, has_pending_request: false, has_approved_access: false } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { requested: true, already_pending: false } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { items: [{ id: 11, inquiry_refno: 'INQ-1', inquiry_no: 'INQ26-1', requested_by: 8, requested_by_name: 'Staff B', requested_at: '2026-11-12 10:00:00' }] } })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, data: { reviewed: true, status: 'approved' } })));
-    vi.stubGlobal('fetch', fetchMock);
 
-    await expect(getSalesInquiryEditAccess('INQ-1')).resolves.toEqual({ confirmed: true, can_edit: false, has_pending_request: false, has_approved_access: false });
-    await requestSalesInquiryEditAccess('INQ-1');
-    await expect(listSalesInquiryEditRequests()).resolves.toEqual([{ id: 11, inquiry_refno: 'INQ-1', inquiry_no: 'INQ26-1', requested_by: 8, requested_by_name: 'Staff B', requested_at: '2026-11-12 10:00:00' }]);
-    await reviewSalesInquiryEditRequest(11, 'approved');
-
-    expect(fetchMock.mock.calls.map(([url, init]) => [String(url), init?.method || 'GET'])).toEqual([
-      ['/api/v1/sales-inquiries/INQ-1/edit-access', 'GET'],
-      ['/api/v1/sales-inquiries/INQ-1/edit-request', 'POST'],
-      ['/api/v1/sales-inquiry-edit-requests', 'GET'],
-      ['/api/v1/sales-inquiry-edit-requests/11/review', 'POST'],
-    ]);
-    expect(JSON.parse(String(fetchMock.mock.calls[3][1]?.body))).toEqual({ decision: 'approved' });
-  });
 });

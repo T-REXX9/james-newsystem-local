@@ -37,11 +37,6 @@ import {
   getSalesInquiry,
   getAllSalesInquiries,
   confirmSalesInquiry,
-  getSalesInquiryEditAccess,
-  getSalesInquiryPrintStatus,
-  recordSalesInquiryPrint,
-  requestSalesInquiryReprint,
-  requestSalesInquiryEditAccess,
   updateSalesInquiry,
 } from '../services/salesInquiryLocalApiService';
 import { getProductPrice, fetchSalesInquiryProductById } from '../services/productLocalApiService';
@@ -66,7 +61,7 @@ import {
   WRITABLE_PRICING_GROUP_OPTIONS,
 } from '../constants/pricingGroups';
 import { formatPreferredBrand } from '../constants/customerPreferredBrand';
-import { isMasterUserAccount, isMasterUserType } from '../constants';
+import { isMasterUserAccount } from '../constants';
 import { DEFAULT_VIP_TIER_CONFIG } from '../utils/vipTierConfig';
 import { buildSalesInquiryCustomerSummary } from '../utils/salesInquirySummary';
 import {
@@ -193,7 +188,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const { addToast } = useToast();
   const authSession = getLocalAuthSession();
   const currentUser = authSession?.userProfile || null;
-  const authUserId = String(authSession?.context?.user?.id || currentUser?.id || '');
   const canAdd = canPerformAction('can_add');
   const canEdit = canPerformAction('can_edit');
   const canDelete = canPerformAction('can_delete');
@@ -269,12 +263,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [inquiries, setInquiries] = useState<SalesInquiry[]>([]);
   const [listLoading, setListLoading] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [editAccess, setEditAccess] = useState<{ confirmed: boolean; can_edit: boolean; has_approved_access: boolean; has_pending_request: boolean } | null>(null);
-  const [editAccessInquiryId, setEditAccessInquiryId] = useState<string | null>(null);
-  const [editAccessLoading, setEditAccessLoading] = useState(false);
-  const [printStatus, setPrintStatus] = useState<{ can_print: boolean; print_count: number; has_pending_request?: boolean } | null>(null);
-  const [printStatusLoading, setPrintStatusLoading] = useState(false);
-  const [printStatusError, setPrintStatusError] = useState('');
   const [showSearchModal, setShowSearchModal] = useState(false);
 
   const getInquirySortTime = (inquiry: SalesInquiry) => {
@@ -339,83 +327,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     void refetchInquiries();
   }, [refetchInquiries]);
 
-  useEffect(() => {
-    let active = true;
-    setPrintStatus(null);
-    setPrintStatusLoading(false);
-    setPrintStatusError('');
-    if (selectedInquiry?.id && !isCreatingNew) {
-      setPrintStatusLoading(true);
-      void getSalesInquiryPrintStatus(selectedInquiry.id)
-        .then((status) => { if (active) setPrintStatus(status); })
-        .catch((error) => {
-          if (active) {
-            console.error('Unable to load inquiry print permission:', error);
-            setPrintStatusError(error instanceof Error ? error.message : 'Unable to check print permission.');
-          }
-        })
-        .finally(() => { if (active) setPrintStatusLoading(false); });
-    }
-    return () => { active = false; };
-  }, [selectedInquiry?.id, isCreatingNew, authUserId]);
-
-  const handleRetryPrintStatus = async () => {
-    if (!selectedInquiry?.id) return;
-    setPrintStatusLoading(true);
-    setPrintStatusError('');
-    try {
-      setPrintStatus(await getSalesInquiryPrintStatus(selectedInquiry.id));
-    } catch (error) {
-      setPrintStatus(null);
-      setPrintStatusError(error instanceof Error ? error.message : 'Unable to check print permission.');
-    } finally {
-      setPrintStatusLoading(false);
-    }
-  };
-
   // Form State
   const [selectedCustomer, setSelectedCustomer] = useState<Contact | null>(null);
-  const isMasterUser = isMasterUserType(currentUser);
-
-  useEffect(() => {
-    let active = true;
-    setEditAccess(null);
-    setEditAccessInquiryId(null);
-    if (!selectedInquiry?.id || isCreatingNew) {
-      setEditAccessLoading(false);
-      return () => { active = false; };
-    }
-    setEditAccessLoading(true);
-    void getSalesInquiryEditAccess(selectedInquiry.id)
-      .then((access) => {
-        if (active) {
-          setEditAccess(access);
-          setEditAccessInquiryId(selectedInquiry.id);
-        }
-      })
-      .catch((error) => {
-        if (active) {
-          console.error('Unable to load inquiry edit permission:', error);
-          setEditAccess({ confirmed: Boolean(selectedInquiry.confirmed_at), can_edit: false, has_approved_access: false, has_pending_request: false });
-          setEditAccessInquiryId(selectedInquiry.id);
-        }
-      })
-      .finally(() => { if (active) setEditAccessLoading(false); });
-    return () => { active = false; };
-  }, [selectedInquiry?.id, selectedInquiry?.confirmed_at, isCreatingNew]);
-
-  const handleRequestInquiryEdit = async () => {
-    if (!selectedInquiry?.id) return;
-    try {
-      await requestSalesInquiryEditAccess(selectedInquiry.id);
-      const access = await getSalesInquiryEditAccess(selectedInquiry.id);
-      setEditAccess(access);
-      setEditAccessInquiryId(selectedInquiry.id);
-      addToast({ type: 'success', title: 'Edit permission requested', description: 'The Master User can review your request in System Access.' });
-    } catch (error) {
-      addToast({ type: 'error', title: 'Unable to request edit permission', description: error instanceof Error ? error.message : 'Please try again.' });
-    }
-  };
   const canExportInquiryItemImages = canExportProductImages(currentUser, selectedCustomer?.assignedAgentId);
   const [vipConfig, setVipConfig] = useState<VipTierConfig>(DEFAULT_VIP_TIER_CONFIG);
   const [postedSales, setPostedSales] = useState<{
@@ -1277,11 +1190,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     if (loading || submitInFlightRef.current) return false;
 
     if (isCreatingNew ? !canAdd : !canEdit) return false;
-    if (selectedInquiry?.confirmed_at && !isMasterUser && !hasConfirmedEditAccess) {
-      addToast({ type: 'info', title: 'Confirmed inquiry is read-only', description: 'Request edit permission from the Master User to change this inquiry.' });
-      return false;
-    }
-
     if (!isCreatingNew && selectedInquiry && selectedInquiry.is_editable === false) {
       addToast({
         type: 'warning',
@@ -1660,13 +1568,37 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   };
   const isConversionLocked = Boolean(selectedInquiry && !isCreatingNew && selectedInquiry.is_editable === false);
   const isInquiryConfirmed = Boolean(selectedInquiry?.confirmed_at) && !isCreatingNew;
-  const hasConfirmedEditAccess = isMasterUser || (editAccessInquiryId === selectedInquiry?.id && Boolean(editAccess?.can_edit));
-  const hasPendingInquiryEditRequest = editAccessInquiryId === selectedInquiry?.id && Boolean(editAccess?.has_pending_request);
-  const confirmedActionLabel = isInquiryConfirmed ? (hasConfirmedEditAccess ? 'Save Changes' : 'Confirmed') : 'Confirm';
-  const confirmedActionDisabled = isInquiryConfirmed && !hasConfirmedEditAccess;
+  const confirmedActionLabel = isInquiryConfirmed ? 'Save Changes' : 'Confirm';
   const isPendingCreateConfirmation = Boolean(selectedInquiry?.id && pendingCreateConfirmationId === selectedInquiry.id);
-  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked || (isCreatingNew ? !canAdd : !canEdit) || (isInquiryConfirmed && !hasConfirmedEditAccess) || isPendingCreateConfirmation;
+  const isReadOnly = selectedInquiry?.status === SalesInquiryStatus.CANCELLED || isConversionLocked || (isCreatingNew ? !canAdd : !canEdit) || isPendingCreateConfirmation;
   const canWriteInquiry = isCreatingNew ? canAdd : canEdit;
+  const hasUnsavedSavedInquiryChanges = Boolean(
+    selectedInquiry
+    && !isCreatingNew
+    && loadedSnapshot?.inquiryId === selectedInquiry.id
+    && (
+      selectedCustomer?.id !== loadedSnapshot.contactId
+      || salesDate !== loadedSnapshot.salesDate
+      || salesTime !== loadedSnapshot.salesTime
+      || salesPerson !== loadedSnapshot.salesPerson
+      || deliveryAddress !== loadedSnapshot.deliveryAddress
+      || referenceNo !== loadedSnapshot.referenceNo
+      || customerReference !== loadedSnapshot.customerReference
+      || sendBy !== loadedSnapshot.sendBy
+      || poNumber !== loadedSnapshot.poNumber
+      || priceGroup !== loadedSnapshot.priceGroup
+      || creditLimit !== loadedSnapshot.creditLimit
+      || terms !== loadedSnapshot.terms
+      || promiseToPay !== loadedSnapshot.promiseToPay
+      || remarks !== loadedSnapshot.remarks
+      || inquiryType !== loadedSnapshot.inquiryType
+      || showNewInquiryType !== loadedSnapshot.showNewInquiryType
+      || newInquiryType !== loadedSnapshot.newInquiryType
+      || urgency !== loadedSnapshot.urgency
+      || urgencyDate !== loadedSnapshot.urgencyDate
+      || JSON.stringify(items) !== JSON.stringify(loadedSnapshot.items)
+    )
+  );
   const isInquiryPostedLike = Boolean(
     selectedInquiry
     && (
@@ -1684,7 +1616,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     const confirmBeforeLeaving = async (keepalive = false): Promise<boolean> => {
       const hasSavedInquiry = Boolean(selectedInquiry?.id && !isCreatingNew);
-      if (hasSavedInquiry && selectedInquiry?.confirmed_at) return true;
+      if (hasSavedInquiry && selectedInquiry?.confirmed_at && !hasUnsavedSavedInquiryChanges) return true;
       const hasDraftData = Boolean(
         selectedCustomer?.id || items.length || customerReference.trim() || sendBy.trim()
         || poNumber.trim() || remarks.trim() || promiseToPay.trim() || deliveryAddress.trim() || newInquiryType.trim()
@@ -1719,50 +1651,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return () => {
       window.removeEventListener('sales-inquiry:before-navigation', handleBeforeAppNavigation);
     };
-  }, [addToast, canAdd, canEdit, canWriteInquiry, creditLimit, customerReference, deliveryAddress, handleSubmit, isCreatingNew, isReadOnly, items.length, newInquiryType, poNumber, priceGroup, promiseToPay, referenceNo, remarks, salesPerson, selectedCustomer?.id, selectedInquiry?.id, sendBy, terms, urgencyDate]);
+  }, [addToast, canAdd, canEdit, canWriteInquiry, creditLimit, customerReference, deliveryAddress, handleSubmit, hasUnsavedSavedInquiryChanges, isCreatingNew, isReadOnly, items.length, newInquiryType, poNumber, priceGroup, promiseToPay, referenceNo, remarks, salesDate, salesPerson, salesTime, selectedCustomer?.id, selectedInquiry?.confirmed_at, selectedInquiry?.id, sendBy, terms, urgency, urgencyDate]);
   const handlePrint = async () => {
     if (!printableInquiry) return;
-    try {
-      const status = printStatus || await getSalesInquiryPrintStatus(printableInquiry.id);
-      setPrintStatus(status);
-      if (!status.can_print) {
-        if (status.has_pending_request) {
-          addToast({ type: 'info', title: 'Request already pending', description: 'The Master User can review it in System Access.' });
-          return;
-        }
-        await requestSalesInquiryReprint(printableInquiry.id);
-        setPrintStatus(await getSalesInquiryPrintStatus(printableInquiry.id));
-        addToast({ type: 'success', title: 'Reprint requested', description: 'The Master User can approve the request in System Access.' });
-        return;
-      }
-      setJpegCaptureMode(false);
-      setShowPrintPreview(true);
-    } catch (error) {
-      addToast({ type: 'error', title: 'Unable to prepare print', description: error instanceof Error ? error.message : 'Please try again.' });
-    }
+    setJpegCaptureMode(false);
+    setShowPrintPreview(true);
   };
   const handlePrintNow = async () => {
-    if (!selectedInquiry?.id) return;
-    try {
-      await recordSalesInquiryPrint(selectedInquiry.id);
-      window.print();
-      setShowPrintPreview(false);
-      setJpegCaptureMode(false);
-      void getSalesInquiryPrintStatus(selectedInquiry.id).then(setPrintStatus).catch(() => undefined);
-    } catch (error) {
-      addToast({ type: 'error', title: 'Print not allowed', description: error instanceof Error ? error.message : 'Please request approval for another print.' });
-      setShowPrintPreview(false);
-    }
-  };
-  const handleRequestReprint = async () => {
-    if (!selectedInquiry?.id) return;
-    try {
-      await requestSalesInquiryReprint(selectedInquiry.id);
-      setPrintStatus(await getSalesInquiryPrintStatus(selectedInquiry.id));
-      addToast({ type: 'success', title: 'Reprint requested', description: 'The Master User can approve the request in System Access.' });
-    } catch (error) {
-      addToast({ type: 'error', title: 'Unable to request reprint', description: error instanceof Error ? error.message : 'Please try again.' });
-    }
+    window.print();
+    setShowPrintPreview(false);
+    setJpegCaptureMode(false);
   };
   const handleExportJpeg = async () => {
     if (!printableInquiry) {
@@ -1775,23 +1673,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     }
     if (exportingJpeg) return;
     try {
-      const status = printStatus || await getSalesInquiryPrintStatus(printableInquiry.id);
-      setPrintStatus(status);
-      if (!status.can_print) {
-        if (status.has_pending_request) {
-          addToast({ type: 'info', title: 'Request already pending', description: 'The Master User can review it in System Access.' });
-        } else {
-          await handleRequestReprint();
-        }
-        return;
-      }
-      await recordSalesInquiryPrint(printableInquiry.id);
-      void getSalesInquiryPrintStatus(printableInquiry.id).then(setPrintStatus).catch(() => undefined);
       setExportingJpeg(true);
       setJpegCaptureMode(true);
       setShowPrintPreview(true);
     } catch (error) {
-      addToast({ type: 'error', title: 'Export not allowed', description: error instanceof Error ? error.message : 'Please request approval for another copy.' });
+      addToast({ type: 'error', title: 'Unable to prepare export', description: error instanceof Error ? error.message : 'Please try again.' });
     }
   };
   const handlePrintSheetReady = useCallback(async (sheet: HTMLElement) => {
@@ -2055,7 +1941,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           <form id="salesInquiryLegacyForm" onSubmit={handleSubmit} className="px-[25px] pb-[30px] pt-[38px]">
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
             {selectedInquiry?.confirmed_at && <p className="mb-3 text-xs text-slate-500">Confirmed at: <time dateTime={selectedInquiry.confirmed_at}>{selectedInquiry.confirmed_at}</time></p>}
-            {isInquiryConfirmed && !hasConfirmedEditAccess && <p role="status" className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">This inquiry is confirmed and read-only for staff. Request Master User permission to edit it.</p>}
             {submitError && <div className="mb-3 rounded border border-[#e8b5b5] bg-[#fff3f3] px-3 py-2 text-[12px] text-[#a33]">{submitError}</div>}
             {isConversionLocked && <div className="mb-3 rounded border border-[#e1c57b] bg-[#fff9e9] px-3 py-2 text-[12px] text-[#725b1b]">This inquiry is locked because it already has a sales document.</div>}
 
@@ -2135,9 +2020,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
               {(isCreatingNew ? canAdd : canDelete) && !isPendingCreateConfirmation && <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>}
-              {printableInquiry && <button type="button" disabled={printStatusLoading || (!printStatus && !printStatusError) || Boolean(printStatus && !printStatus.can_print && printStatus.has_pending_request)} onClick={() => { if (!printStatus) void handleRetryPrintStatus(); else void (printStatus.can_print ? handlePrint() : handleRequestReprint()); }} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">{printStatusLoading ? 'Checking print...' : printStatusError ? 'Retry print check' : !printStatus ? 'Checking print...' : printStatus.can_print ? 'Print' : printStatus.has_pending_request ? 'Request Pending' : 'Request Reprint'}</button>}
-              {canWriteInquiry && <button type="submit" disabled={loading || (isReadOnly && !isPendingCreateConfirmation) || confirmedActionDisabled} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-50">{loading ? (isInquiryConfirmed ? 'Saving...' : 'Confirming...') : confirmedActionLabel}</button>}
-              {canWriteInquiry && !isMasterUser && isInquiryConfirmed && !hasConfirmedEditAccess && <button type="button" onClick={() => void handleRequestInquiryEdit()} disabled={editAccessLoading || hasPendingInquiryEditRequest} className="rounded-[4px] border border-amber-300 bg-amber-50 px-[16px] py-[9px] text-[13px] font-semibold text-amber-900 disabled:cursor-not-allowed disabled:opacity-60">{editAccessLoading ? 'Checking permission...' : hasPendingInquiryEditRequest ? 'Permission Pending' : 'Request Edit Permission'}</button>}
+              {canWriteInquiry && <button type="submit" disabled={loading || (isReadOnly && !isPendingCreateConfirmation)} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-50">{loading ? (isInquiryConfirmed ? 'Saving...' : 'Confirming...') : confirmedActionLabel}</button>}
               {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
               {canOpenConvertedOrder && (
                 <ModuleRecordAction
@@ -2442,7 +2325,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           <div className="overflow-x-auto">
             <ValidationSummary errors={validationErrors} summaryKey={submitCount} />
             {selectedInquiry?.confirmed_at && <p className="mb-3 text-xs text-slate-500">Confirmed at: <time dateTime={selectedInquiry.confirmed_at}>{selectedInquiry.confirmed_at}</time></p>}
-            {isInquiryConfirmed && !hasConfirmedEditAccess && <p role="status" className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">This inquiry is confirmed and read-only for staff. Request Master User permission to edit it.</p>}
             {submitError && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 mb-4">{submitError}</div>
             )}
@@ -3014,15 +2896,9 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
           <div className="flex items-center gap-2">
             {printableInquiry && (
-              <button
-                type="button"
-                onClick={() => { if (!printStatus) void handleRetryPrintStatus(); else void (printStatus.can_print ? handlePrint() : handleRequestReprint()); }}
-                disabled={printStatusLoading || (!printStatus && !printStatusError) || Boolean(printStatus && !printStatus.can_print && printStatus.has_pending_request)}
-                data-jpeg-export-ignore
-                className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors inline-flex items-center gap-2"
-              >
+              <button type="button" onClick={() => void handlePrint()} data-jpeg-export-ignore className="px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition-colors inline-flex items-center gap-2">
                 <Printer className="w-4 h-4" />
-                {printStatusLoading ? 'Checking print…' : printStatusError ? 'Retry print check' : !printStatus ? 'Checking print…' : printStatus.can_print ? 'Print' : printStatus.has_pending_request ? 'Request Pending' : 'Request Reprint'}
+                Print
               </button>
             )}
             <button
@@ -3046,13 +2922,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
             <button
               type="submit"
               form="salesInquiryForm"
-              disabled={loading || isReadOnly || confirmedActionDisabled}
+              disabled={loading || isReadOnly}
               data-jpeg-export-ignore
               className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (isInquiryConfirmed ? 'SAVING…' : 'CONFIRMING…') : confirmedActionLabel.toUpperCase()}
             </button>
-            {canWriteInquiry && !isMasterUser && isInquiryConfirmed && !hasConfirmedEditAccess && <button type="button" onClick={() => void handleRequestInquiryEdit()} disabled={editAccessLoading || hasPendingInquiryEditRequest} data-jpeg-export-ignore className="px-4 py-2 rounded-lg border border-amber-300 bg-amber-50 font-semibold text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">{editAccessLoading ? 'CHECKING PERMISSION…' : hasPendingInquiryEditRequest ? 'PERMISSION PENDING' : 'REQUEST EDIT PERMISSION'}</button>}
           </div>
         </div>
       </div>
