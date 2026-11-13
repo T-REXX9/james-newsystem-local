@@ -17,7 +17,6 @@ import {
   updateProduct,
   type ProductListStatus,
   type ProductCodePrefix,
-  type ProductPriceGroup,
 } from '../services/productLocalApiService';
 import { clearNotListedRemarks } from '../services/suggestedStockService';
 import { fetchSuppliers } from '../services/supplierService';
@@ -86,7 +85,6 @@ const EMPTY_PRODUCT: ProductForm = {
   brand: '',
   barcode: '',
   no_of_pieces_per_box: 0,
-  replenish_quantity: 0,
   item_code: '',
   description: '',
   size: '',
@@ -221,8 +219,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   const [statusFilter, setStatusFilter] = useState<ProductListStatus>('active');
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [productCodePrefixes, setProductCodePrefixes] = useState<ProductCodePrefix[]>([]);
-  const [priceGroups, setPriceGroups] = useState<ProductPriceGroup[]>([]);
-  const [priceGroupAmounts, setPriceGroupAmounts] = useState<Record<string, number>>({});
   const [productCodePrefix, setProductCodePrefix] = useState('');
   const [regenerateItemCodePrefix, setRegenerateItemCodePrefix] = useState('');
   const [isRegeneratingItemCode, setIsRegeneratingItemCode] = useState(false);
@@ -322,15 +318,11 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
         setCategories(categoryResult.items);
         setSuppliers(supplierResult);
         setProductCodePrefixes(createOptions.codePrefixes);
-        setPriceGroups(createOptions.priceGroups);
-        setPriceGroupAmounts(Object.fromEntries(createOptions.priceGroups.map((group) => [group.name, 0])));
       })
       .catch(() => {
         setCategories([]);
         setSuppliers([]);
         setProductCodePrefixes([]);
-        setPriceGroups([]);
-        setPriceGroupAmounts({});
       });
   }, []);
 
@@ -362,7 +354,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     setRegenerateItemCodePrefix('');
     setNewProductCodePrefix('');
     setNewProductCategory('');
-    setPriceGroupAmounts(Object.fromEntries(priceGroups.map((group) => [group.name, 0])));
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
     setSubmitError('');
@@ -411,7 +402,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
     setProductCodePrefix('');
     setNewProductCodePrefix('');
     setNewProductCategory('');
-    setPriceGroupAmounts(Object.fromEntries(priceGroups.map((group) => [group.name, 0])));
     setSelectedSupplierRows([]);
     setApplyCostToAll(false);
     setSubmitError('');
@@ -475,8 +465,10 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
   };
 
   const buildPayload = () => {
+    const productPayload = { ...formData };
+    delete productPayload.replenish_quantity;
     return {
-      ...formData,
+      ...productPayload,
       part_no: String(formData.part_no || '').replace(/\s+/g, ''),
       item_code: String(formData.item_code || '').trim(),
       supplier_costs: formData.supplier_costs || [],
@@ -504,7 +496,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
           create_product_code_prefix: productCodePrefix === ADD_PRODUCT_CODE_PREFIX,
           suggested_inquiry_item_id: fromSuggestedStock ? initialSuggestedInquiryItemId : '',
           suggested_part_no: fromSuggestedStock ? initialPartNo : '',
-          ...(priceGroups.length > 0 ? { price_group_amounts: priceGroupAmounts } : {}),
           category: formData.category === ADD_PRODUCT_CATEGORY ? newProductCategory.trim() : formData.category,
           create_category: formData.category === ADD_PRODUCT_CATEGORY,
         });
@@ -816,7 +807,6 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
               <LegacyField label="No. of Cylinder">{fieldInput('no_of_cylinder', 'Input No. of Cylinder')}</LegacyField>
               <LegacyField label="Barcode">{fieldInput('barcode', 'Input Barcode')}</LegacyField>
               <LegacyField label="Reorder Quantity">{fieldInput('reorder_quantity', 'Input Reorder Qty', 'number')}</LegacyField>
-              <LegacyField label="Replenish Quantity">{fieldInput('replenish_quantity', 'Input Replenish Qty', 'number')}</LegacyField>
               <LegacyField label="Pcs per Box">{fieldInput('no_of_pieces_per_box', 'Input Qty', 'number')}</LegacyField>
               <LegacyField label="Status">
                 <select value={formData.status} onChange={(event) => updateField('status', event.target.value)} className={inputClass}>
@@ -885,23 +875,9 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
             {detailTab === 'pricing' && <div>
             <h2 className="mb-3 font-semibold">Price List</h2>
             <div className="grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
-              {!editingProduct && priceGroups.length > 0 ? priceGroups.map((group) => (
-                <LegacyField key={group.name} label={group.type === 'Regular' ? `Regular - ${group.name}` : group.name}>
-                  <input
-                    type="number"
-                    value={priceGroupAmounts[group.name] ?? 0}
-                    onChange={(event) => setPriceGroupAmounts((current) => ({ ...current, [group.name]: Number(event.target.value || 0) }))}
-                    placeholder="Input Amount"
-                    className={inputClass}
-                  />
-                </LegacyField>
-              )) : (
-                <>
-                  <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
-                  <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
-                  <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
-                </>
-              )}
+              <LegacyField label="VIP 1">{fieldInput('price_vip1', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 2">{fieldInput('price_vip2', 'Input Amount', 'number')}</LegacyField>
+              <LegacyField label="VIP 3">{fieldInput('price_vip3', 'Input Amount', 'number')}</LegacyField>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-x-5 gap-y-3 md:grid-cols-2 xl:grid-cols-4">
               <LegacyField label="Current Stock">
