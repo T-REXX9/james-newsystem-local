@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmSalesInquiry, getSalesInquiry, replaceSalesInquiry } from '../salesInquiryLocalApiService';
+import { confirmSalesInquiry, convertToOrder, getSalesInquiry, replaceSalesInquiry } from '../salesInquiryLocalApiService';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -71,6 +71,22 @@ describe('salesInquiryLocalApiService', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/sales-inquiries/INQ-1/confirm');
     expect(fetchMock.mock.calls[0][1]?.keepalive).toBe(true);
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({ permission_action: 'add' });
+  });
+
+  it('keeps the persisted VIP discount when mapping a converted sales order', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, data: {
+      order: { sales_refno: 'SO-1', sales_no: 'SO-1', inquiry_refno: 'INQ-1', status: 'Submitted' },
+      summary: { grand_total: 1000, vip_applied: 1, vip_tier: 'silver', vip_percentage: 10, vip_discount_amount: 100, total_to_pay: 900 },
+      items: [],
+    } }))));
+
+    await expect(convertToOrder('INQ-1')).resolves.toMatchObject({
+      vip_applied: true,
+      vip_tier: 'silver',
+      vip_percentage: 10,
+      vip_discount_amount: 100,
+      total_to_pay: 900,
+    });
   });
 
 

@@ -282,6 +282,7 @@ const mapConvertedSalesOrder = (payload: any): SalesOrder => {
     urgency: String(order?.urgency || ''),
     urgency_date: String(order?.urgency_date || ''),
     grand_total: toNumber(summary?.grand_total, 0),
+    ...readPersistedVip({ ...order, ...summary }),
     status: String(order?.status || 'Submitted') as any,
     approved_by: '',
     approved_at: '',
