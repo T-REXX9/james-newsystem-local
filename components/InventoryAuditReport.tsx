@@ -208,8 +208,8 @@ const InventoryAuditReport: React.FC = () => {
     }
   };
 
-  const closeCountEditor = () => {
-    if (isSaving) return;
+  const closeCountEditor = (force = false) => {
+    if (isSaving && !force) return;
     setEditingPartNo('');
     setModalItems([]);
     setCountDrafts({});
@@ -259,7 +259,7 @@ const InventoryAuditReport: React.FC = () => {
     setIsSaving(true);
     try {
       await deleteInventoryAuditItem(detail.header.refno, itemSession);
-      closeCountEditor();
+      closeCountEditor(true);
       await Promise.all([loadDetail(), loadHeaders(detail.header.refno)]);
       addToast({ type: 'success', title: 'Item adjustment deleted', description: 'The stock change was reversed.' });
     } catch (error) {
