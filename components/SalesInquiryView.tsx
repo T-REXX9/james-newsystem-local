@@ -1917,12 +1917,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         </section>
 
         <section ref={salesInquiryExportRef} className="min-h-[695px] overflow-visible rounded-[5px] border border-[#d7d7d7] bg-white">
-          <div className="flex h-[64px] items-center justify-between border-b border-[#d7d7d7] px-5">
+          <div className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-[#d7d7d7] px-5 py-3">
             <div className="flex items-center gap-3">
               <div className="relative flex h-full items-center text-[18px] font-semibold text-[#29475f] after:absolute after:bottom-[-1px] after:left-0 after:h-px after:w-[135px] after:bg-[#6a92b3]">SALES INQUIRY</div>
               <VipStandingBadge tier={vipDiscount.tier} />
             </div>
-            <div className="flex items-center gap-[28px]">
+            <div className="flex flex-wrap items-center justify-end gap-3 lg:gap-[28px]">
               <button
                 type="button"
                 onClick={handleExportJpeg}
@@ -2020,6 +2020,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
             {(items.length > 0 || (!isCreatingNew && selectedInquiry)) && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap items-center gap-[5px] border-t border-[#e3e3e3] pt-4">
               {(isCreatingNew ? canAdd : canDelete) && !isPendingCreateConfirmation && <button type="button" onClick={handleDeleteClick} className="rounded-[4px] bg-[#d64b47] px-[20px] py-[9px] text-[13px] text-white">{isCreatingNew ? 'Clear' : 'Cancel'}</button>}
+              {printableInquiry && <button type="button" onClick={() => void handlePrint()} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white">Print</button>}
               {canWriteInquiry && <button type="submit" disabled={loading || (isReadOnly && !isPendingCreateConfirmation)} className="rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-50">{loading ? (isInquiryConfirmed ? 'Saving...' : 'Confirming...') : confirmedActionLabel}</button>}
               {canGenerateSO && <button type="button" onClick={handleFinalizeInquiry} disabled={loading} className="ml-auto rounded-[4px] bg-[#4caf50] px-[20px] py-[9px] text-[13px] text-white disabled:opacity-50">Generate SO</button>}
               {canOpenConvertedOrder && (
