@@ -65,15 +65,22 @@ describe('dailyCallListCategory', () => {
   });
 
   it('moves a former verified prospect into Priority after the first purchase', () => {
-    expect(resolveDailyCallMonitorBucket({
+    const row = {
       profileType: 'Prospect',
       verification: 'Verified',
+      verifiedInSystem: true,
+      customerStatus: 3,
       purchaseCount: 1,
-      priorityTransactionCount: 1,
-      ledgerTransactionCount: 1,
+      priorityTransactionCount: 0,
+      ledgerTransactionCount: 0,
       lastPurchaseDateRaw: '2026-09-05',
       listCategory: 'no_purchase',
-    })).toBe('priority');
+    } as const;
+
+    expect(resolveDailyCallListCategory(row)).toBe('priority');
+    expect(resolveDailyCallMonitorBucket(row)).toBe('priority');
+    expect(matchesDailyCallMonitorBucket(row, 'priority')).toBe(true);
+    expect(matchesDailyCallMonitorBucket(row, 'verified')).toBe(false);
   });
 
   it('routes a Priority List customer to Recovery while an override is active and restores normal filtering after removal', () => {

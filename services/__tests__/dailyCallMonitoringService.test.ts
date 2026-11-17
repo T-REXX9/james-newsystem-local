@@ -202,8 +202,22 @@ describe('dailyCallMonitoringService', () => {
               last_purchase_date_raw: '',
               purchase_age_group: 'no_purchase',
             },
+            {
+              id: 'verified-buyer-1',
+              shop_name: 'Verified Prospect First Buyer',
+              profile_type: 'Prospect',
+              verification: 'Verified',
+              verified_in_system: 1,
+              customer_status: 3,
+              purchase_count: 1,
+              priority_transaction_count: 0,
+              ledger_transaction_count: 0,
+              list_category: 'no_purchase',
+              last_purchase_date_raw: '2026-11-05',
+              purchase_age_group: 'recent',
+            },
           ],
-          meta: { from_date: '2025-10-01', to_date: '2026-09-12', count: 3 },
+          meta: { from_date: '2025-10-01', to_date: '2026-11-05', count: 4 },
         },
       }),
     } as Response);
@@ -214,6 +228,7 @@ describe('dailyCallMonitoringService', () => {
       expect.objectContaining({ id: 'priority-1', listCategory: 'priority' }),
       expect.objectContaining({ id: 'recovery-1', listCategory: 'recovery' }),
       expect.objectContaining({ id: 'prospect-1', listCategory: 'no_purchase' }),
+      expect.objectContaining({ id: 'verified-buyer-1', listCategory: 'priority' }),
     ]);
   });
 

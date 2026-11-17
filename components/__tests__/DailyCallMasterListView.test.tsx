@@ -1931,7 +1931,7 @@ describe('DailyCallMasterListView', () => {
     expect(screen.getByText('Old Verified Buyer Shop')).toBeInTheDocument();
   });
 
-  it('moves clients who start buying into the Priority List', async () => {
+  it('moves a verified prospect with a new purchase date into Priority when activity counts lag', async () => {
     vi.mocked(fetchDailyCallMasterList).mockResolvedValue({
       meta: { fromDate: '2025-10-01', toDate: '2026-09-09', count: 1 },
       items: [{
@@ -1943,11 +1943,14 @@ describe('DailyCallMasterListView', () => {
         assignedTo: 'Apostol Ella',
         profileType: 'Prospect',
         verification: 'Verified',
+        verifiedInSystem: true,
+        customerStatus: 3,
         lastPurchaseDate: 'Sep 5, 2026',
         lastPurchaseDateRaw: '2026-09-05',
         purchaseCount: 1,
-        priorityTransactionCount: 1,
-        // Stale prospect shape must still leave Verified once buying starts.
+        priorityTransactionCount: 0,
+        ledgerTransactionCount: 0,
+        // A stale no-purchase label/counts must not keep a buyer in Verified.
         listCategory: 'no_purchase',
         totalSales: 5000,
         currentMonthSales: 5000,

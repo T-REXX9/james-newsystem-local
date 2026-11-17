@@ -959,6 +959,13 @@ describe('DailyCallMonitoringView communication actions', () => {
         },
         {
           ...baseSnapshot.contacts[0],
+          id: 'verified-purchased',
+          shopName: 'Purchased Verified Prospect',
+          status: 'verified_prospect',
+          verification: 'Verified',
+        },
+        {
+          ...baseSnapshot.contacts[0],
           id: 'old-verified-no-purchase',
           shopName: 'Old Verified No Purchase',
           status: 'active',
@@ -993,6 +1000,20 @@ describe('DailyCallMonitoringView communication actions', () => {
           lastPurchaseDateRaw: '',
         },
         {
+          id: 'verified-purchased',
+          shopName: 'Purchased Verified Prospect',
+          profileType: 'Prospect',
+          verification: 'Verified',
+          verifiedInSystem: true,
+          customerStatus: 3,
+          listCategory: 'no_purchase',
+          purchaseCount: 1,
+          priorityTransactionCount: 0,
+          ledgerTransactionCount: 0,
+          lastPurchaseDateRaw: '2026-11-05',
+          currentMonthSales: 500,
+        },
+        {
           id: 'old-verified-no-purchase',
           shopName: 'Old Verified No Purchase',
           profileType: 'Old',
@@ -1017,12 +1038,19 @@ describe('DailyCallMonitoringView communication actions', () => {
     const verifiedSummary = within(categorySummaries)
       .getByRole('heading', { name: 'Verified Prospects' })
       .closest('article')!;
+    const prioritySummary = within(categorySummaries)
+      .getByRole('heading', { name: 'Priority List' })
+      .closest('article')!;
     const unverifiedSummary = within(categorySummaries)
       .getByRole('heading', { name: 'Unverified Prospects' })
       .closest('article')!;
 
     expect(within(verifiedSummary).getByText('1')).toBeInTheDocument();
+    expect(within(prioritySummary).getByText('1')).toBeInTheDocument();
     expect(within(unverifiedSummary).getByText('2')).toBeInTheDocument();
+
+    await expandList('Priority List');
+    expect(within(screen.getByLabelText('Customer category table')).getByText('Purchased Verified Prospect')).toBeInTheDocument();
   });
 
   it('sales agents request verification instead of directly verifying an existing prospect', async () => {
