@@ -1432,6 +1432,11 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     return map;
   }, [masterListRows]);
 
+  const recoveryOverrideContactIds = useMemo(
+    () => new Set(masterListRows.filter((row) => row.isOverridden).map((row) => row.id)),
+    [masterListRows]
+  );
+
   const ledgerAverageMonthlySalesByContact = useMemo(() => {
     const map = new Map<string, number>();
     masterListRows.forEach((row) => {
@@ -2655,6 +2660,15 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                     </span>
                                   )}
                                 </span>
+                                {summary.id === 'recovery' && recoveryOverrideContactIds.has(row.contact.id) && (
+                                  <span
+                                    className="mt-0.5 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-extrabold uppercase text-amber-800 dark:bg-amber-900/50 dark:text-amber-200"
+                                    aria-label="Manually overridden into Recovery List"
+                                    title="Manually overridden into Recovery List"
+                                  >
+                                    Recovery override
+                                  </span>
+                                )}
                                 {row.contact.team && (
                                   <span className="mt-0.5 block truncate text-[9px] font-bold uppercase leading-tight text-indigo-700 dark:text-indigo-300" title={`Team: ${row.contact.team}`}>
                                     Team: {row.contact.team}
@@ -2663,8 +2677,8 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
                                 <span className={`mt-0.5 block truncate text-[10px] font-medium leading-tight ${highlight.mutedClassName} dark:text-slate-400`} title={getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}>
                                   {getPhoneNumber(row.contact) || getContactLocationLabel(row.contact)}
                                 </span>
-                                <span className="mt-0.5 block truncate text-[10px] leading-tight text-slate-400" title={`${formatDate(row.lastPurchase)} · ${formatRelativeTime(row.lastPurchase)}`}>
-                                  {formatDate(row.lastPurchase)} · {formatRelativeTime(row.lastPurchase)}
+                                <span className="mt-0.5 block truncate text-[10px] leading-tight text-slate-400" title={`${formatDate(row.dailyCallStatusLastPurchase ?? row.lastPurchase)} · ${formatRelativeTime(row.dailyCallStatusLastPurchase ?? row.lastPurchase)}`}>
+                                  {formatDate(row.dailyCallStatusLastPurchase ?? row.lastPurchase)} · {formatRelativeTime(row.dailyCallStatusLastPurchase ?? row.lastPurchase)}
                                 </span>
                               </span>
                               <span className="col-start-2 flex min-w-0 flex-wrap items-center justify-between gap-x-2 text-left">

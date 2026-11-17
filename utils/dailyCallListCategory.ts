@@ -48,25 +48,28 @@ const hasAnyLedgerActivity = (row: ListCategoryInput): boolean => {
 
 /**
  * Strict Priority / Recovery / no-purchase rule:
- * - Priority: any ledger activity from Oct 2025 onwards
- * - Recovery: ledger activity only before Oct 2025
+ * - Priority: qualifying sales on/after the configured cutoff date
+ * - Recovery: ledger activity only before the configured cutoff
  * - no_purchase: no ledger activity (prospects live here until first purchase)
  *
  * Never treat purchaseCount alone as Priority — that mis-files Recovery buyers.
- * Always honor lastPurchaseDateRaw / ledger counts over a stale listCategory.
+ * The latest qualifying sale date wins over stale aggregate counts and listCategory.
  */
 export const resolveDailyCallListCategory = (row: ListCategoryInput): DailyCallListCategory => {
   const priorityTransactions = Number(row.priorityTransactionCount ?? 0);
-  if (priorityTransactions > 0) return 'priority';
+  const lastPurchase = normalizePurchaseDate(row.lastPurchaseDateRaw);
+  // The latest qualifying sale date is authoritative when aggregate counts
+  // disagree (for example, when a posted sales document has no ledger mirror).
+  if (priorityTransactions > 0 || (lastPurchase && lastPurchase >= DAILY_CALL_PRIORITY_FROM_DATE)) {
+    return 'priority';
+  }
 
   const ledgerTransactions = Number(row.ledgerTransactionCount ?? 0);
   const historicalTransactions = Number(row.historicalTransactionCount ?? 0);
   if (ledgerTransactions > 0 || historicalTransactions > 0) return 'recovery';
 
   const purchaseCount = Number(row.purchaseCount ?? 0);
-  const lastPurchase = normalizePurchaseDate(row.lastPurchaseDateRaw);
   if (purchaseCount > 0 || lastPurchase) {
-    if (lastPurchase && lastPurchase >= DAILY_CALL_PRIORITY_FROM_DATE) return 'priority';
     if (lastPurchase && lastPurchase < DAILY_CALL_PRIORITY_FROM_DATE) return 'recovery';
     // Purchase count without a usable date: treat as recovery rather than Priority/prospect.
     if (purchaseCount > 0) return 'recovery';
