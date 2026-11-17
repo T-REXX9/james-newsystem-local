@@ -1,6 +1,6 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import DailyCallSalesColorBreakdown from '../DailyCallSalesColorBreakdown';
 
 const fetchBreakdown = vi.fn();
@@ -70,5 +70,22 @@ describe('DailyCallSalesColorBreakdown', () => {
     expect(screen.getByText('Blacklisted / rejected customers')).toBeInTheDocument();
     expect(screen.getByText('0 total')).toBeInTheDocument();
     expect(screen.getByText('Existing client').parentElement).toHaveTextContent('0');
+  });
+
+  it('reloads the breakdown when its parent customer data refreshes', async () => {
+    fetchBreakdown.mockResolvedValue({
+      month: '2026-10',
+      company_total: 0,
+      blocked_customers: { total: 2, existing_client: 2, verified_prospective: 0, unverified_prospective: 0 },
+      agents: [],
+      unassigned: { id: '', name: 'Unassigned', customer_count: 0, sales: 0, unclassified_sales: 0, colors: emptyColors },
+    });
+
+    const { rerender } = render(<DailyCallSalesColorBreakdown compact minimal refreshKey={[]} />);
+    await waitFor(() => expect(fetchBreakdown).toHaveBeenCalledTimes(1));
+
+    rerender(<DailyCallSalesColorBreakdown compact minimal refreshKey={[{ id: 'updated-customer' }]} />);
+
+    await waitFor(() => expect(fetchBreakdown).toHaveBeenCalledTimes(2));
   });
 });

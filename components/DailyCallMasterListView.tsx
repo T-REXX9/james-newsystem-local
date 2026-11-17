@@ -1810,7 +1810,7 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
               </div>
             </div>
             {category.id === 'blocked' && (
-              <p className="mt-2 border-t border-red-200 pt-2 text-xs font-semibold text-red-700">View only. Contact and sales inquiry actions are disabled.</p>
+              <DailyCallSalesColorBreakdown compact minimal refreshKey={rows} />
             )}
             {category.id === 'unverified' && (
               <p className="mt-2 border-t border-orange-200 pt-2 text-xs font-semibold text-orange-700">Found: {unverifiedCreatedCounts.today} today · {unverifiedCreatedCounts.week} this week · {unverifiedCreatedCounts.month} this month</p>
@@ -1964,11 +1964,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
                   />
                   Select all in list ({selectableDoNotCallRows.length})
                 </label>
-                {activeCategory.id === 'blocked' && (
-                  <div data-testid="daily-call-blocked-breakdown-placement" className="min-w-0 max-w-2xl flex-1 basis-[32rem]">
-                    <DailyCallSalesColorBreakdown compact inToolbar />
-                  </div>
-                )}
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs font-semibold text-slate-600" aria-live="polite">{selectedMasterRows.length} selected</span>
                   {selectedMasterRows.length > 0 && <button

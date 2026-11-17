@@ -1855,15 +1855,14 @@ describe('DailyCallMasterListView', () => {
     const blockedCard = within(summaries).getByRole('heading', { name: /Blacklisted\/Rejected/i }).closest('article') as HTMLElement;
     expect(within(blockedCard).getByText('Monthly Potential Sales')).toBeInTheDocument();
     expect(within(blockedCard).getByText('Current Month Sales')).toBeInTheDocument();
-    expect(within(blockedCard).getByText('View only. Contact and sales inquiry actions are disabled.')).toBeInTheDocument();
-    const blockedBreakdownPlacement = screen.getByTestId('daily-call-blocked-breakdown-placement');
-    expect(blockedBreakdownPlacement).toHaveClass('max-w-2xl');
-    expect(await within(blockedBreakdownPlacement).findByText('Blacklisted / rejected breakdown')).toBeInTheDocument();
-    expect(within(blockedBreakdownPlacement).getAllByText('1,000', { selector: 'dd' })).toHaveLength(2);
-    expect(within(blockedBreakdownPlacement).getByText('1,084', { selector: 'dd' })).toBeInTheDocument();
-    const existingClientMetric = within(blockedBreakdownPlacement).getByText('Existing client').parentElement;
-    expect(existingClientMetric).toHaveClass('gap-1.5');
-    expect(existingClientMetric).not.toHaveClass('justify-between');
+    expect(within(blockedCard).queryByText('View only. Contact and sales inquiry actions are disabled.')).not.toBeInTheDocument();
+    expect(await within(blockedCard).findByText('Existing')).toBeInTheDocument();
+    expect(within(blockedCard).getByText('Verified')).toBeInTheDocument();
+    expect(within(blockedCard).getByText('Unverified')).toBeInTheDocument();
+    expect(within(blockedCard).getAllByText('1,000', { selector: 'dd' })).toHaveLength(2);
+    expect(within(blockedCard).getByText('1,084', { selector: 'dd' })).toBeInTheDocument();
+    const existingClientMetric = within(blockedCard).getByText('Existing').parentElement;
+    expect(existingClientMetric).toHaveClass('gap-1');
   });
 
   it('moves Verified Prospects with purchase history out of the verified list into Recovery or Priority', async () => {
