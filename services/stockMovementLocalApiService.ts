@@ -70,6 +70,14 @@ const normalizeLog = (row: any): InventoryLogWithProduct => {
     is_deleted: false,
     deleted_at: undefined,
     balance: Number(row.balance ?? 0),
+    document_number: String(row.document_number ?? ''),
+    document_date: String(row.document_date ?? ''),
+    reference_created_at: String(row.reference_created_at ?? ''),
+    reference_created_at_source: String(row.reference_created_at_source ?? ''),
+    reference_is_backdated: row.reference_is_backdated === null || row.reference_is_backdated === undefined
+      ? null
+      : Number(row.reference_is_backdated),
+    document_status: String(row.document_status ?? ''),
   };
 };
 

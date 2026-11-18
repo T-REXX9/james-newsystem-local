@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 import type { InventoryLogWithProduct } from '../types';
+import { formatReferenceHoverDetails } from '../utils/referenceHoverDetails';
 
 interface InventoryLogRowProps {
   log: InventoryLogWithProduct;
@@ -28,6 +29,15 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
   const date = parseDate(log.date);
   const dateStr = date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
   const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const referenceDetails = formatReferenceHoverDetails({
+    reference: log.reference_no,
+    documentNumber: log.document_number,
+    documentDate: log.document_date,
+    createdAt: log.reference_created_at,
+    createdAtSource: log.reference_created_at_source,
+    isBackdated: log.reference_is_backdated,
+    status: log.document_status,
+  });
 
   return (
     <tr className={`border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
@@ -52,7 +62,8 @@ const InventoryLogRow: React.FC<InventoryLogRowProps> = ({ log, showWarehouse, o
         <button
           onClick={() => onReferenceClick?.(log)}
           className="flex items-center gap-1 text-brand-blue hover:underline font-medium"
-          title={`Navigate to ${log.transaction_type}`}
+          title={`${referenceDetails}\n\nActivate to navigate to ${log.transaction_type}`}
+          aria-label={`${log.reference_no}. ${referenceDetails.replace(/\n/g, '. ')}`}
         >
           {log.reference_no}
           <ExternalLink className="w-3 h-3" />

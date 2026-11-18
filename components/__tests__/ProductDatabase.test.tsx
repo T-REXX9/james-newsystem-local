@@ -227,7 +227,7 @@ describe('ProductDatabase', () => {
     expect(screen.getByText('Preferred Supplier 1')).toBeInTheDocument();
     expect(screen.getByText('Preferred Supplier 1').closest('div')).toHaveClass('h-12', 'items-center');
     expect(screen.getByText('25')).toBeInTheDocument();
-    expect(screen.getByText('(20/07/2026)')).toBeInTheDocument();
+    expect(screen.getByText('(07/20/26)')).toBeInTheDocument();
     const productTable = screen.getByText('Specifications').closest('table');
     expect(productTable).toHaveClass('w-full', 'table-fixed');
     expect(within(productTable!).getByText('ISUZU 10PD1, 8PC, 8PD1, 8PC1')).toBeInTheDocument();
@@ -246,12 +246,12 @@ describe('ProductDatabase', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
-  it('lists yearly sales from 2018 through the current year without clipping them', async () => {
+  it('lists yearly sales from 2013 through the current year without clipping them', async () => {
     render(<ProductDatabase currentUser={{ role: 'Owner' } as any} />);
 
     await screen.findByText('QK2-001');
     const yearlySalesCell = screen.getByText('2018:').closest('td');
-    const expectedYears = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, index) => `${2018 + index}:`);
+    const expectedYears = Array.from({ length: new Date().getFullYear() - 2013 + 1 }, (_, index) => `${2013 + index}:`);
 
     expect(yearlySalesCell).not.toBeNull();
     expect(within(yearlySalesCell!).getAllByText(/^20\d{2}:$/).map((year) => year.textContent)).toEqual(expectedYears);

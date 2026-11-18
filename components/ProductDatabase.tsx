@@ -25,6 +25,7 @@ import { validateMinLength, validateRequired } from '../utils/formValidation';
 import { getCentralStock } from '../utils/productStock';
 import { canPerformAction } from '../utils/actionPermissions';
 import RecordImagePicker from './RecordImagePicker';
+import { formatReferenceHoverDetails } from '../utils/referenceHoverDetails';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 interface ProductDatabaseProps {
@@ -138,6 +139,21 @@ const formatBlueprintDate = (value?: string): string => {
   const parsed = new Date(text);
   if (Number.isNaN(parsed.getTime())) return text;
   return parsed.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: '2-digit' }).replace(/ /g, '\u2011').replace(',', '').toUpperCase();
+};
+
+const formatReceiveDate = (value?: string): string => {
+  const text = String(value || '').trim();
+  if (!text) return '-';
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return `${match[2]}/${match[3]}/${match[1].slice(-2)}`;
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return '-';
+  return new Intl.DateTimeFormat('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: '2-digit',
+    timeZone: 'UTC',
+  }).format(parsed);
 };
 
 const compactQuantity = (value?: number): string => {
@@ -958,8 +974,8 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                     {!isLoading && products.length === 0 && <tr><td colSpan={23} className="px-3 py-6 text-center text-slate-500">No products found.</td></tr>}
                     {products.map((product, productIndex) => {
                       const selected = highlightedProductId === product.id;
-                      const yearlySales = Array.from({ length: new Date().getFullYear() - 2018 + 1 }, (_, index) => {
-                        const year = String(2018 + index);
+                      const yearlySales = Array.from({ length: new Date().getFullYear() - 2013 + 1 }, (_, index) => {
+                        const year = String(2013 + index);
                         return [year, Number(product.sales_by_year?.[year] || 0)] as const;
                       });
                       const background = product.status === 'Active' ? 'bg-white' : 'bg-[#e8e8e8]';
@@ -968,6 +984,15 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                       const currentStock = getConsolidatedStock(product);
                       const isLowStock = currentStock <= Number(product.reorder_quantity || 0);
                       const specifications = getSpecificationRows(product);
+                      const receiveReferenceTooltip = formatReferenceHoverDetails({
+                        reference: product.last_receive_reference_id || product.last_receive_reference || '',
+                        documentNumber: product.last_receive_reference || undefined,
+                        documentDate: product.last_receive_date,
+                        createdAt: product.last_receive_created_at,
+                        createdAtSource: product.last_receive_created_at_source,
+                        isBackdated: product.last_receive_is_backdated,
+                        status: product.last_receive_status,
+                      });
                       return (
                         <tr
                           key={product.id}
@@ -1033,7 +1058,17 @@ const ProductDatabase: React.FC<ProductDatabaseProps> = ({
                           </td>
                           <td className="border border-[#ddd] px-1 py-2 text-center align-top">
                             <strong className="text-[9.9px] min-[1450px]:text-[11px]">{compactQuantity(product.last_receive_quantity)}</strong>
-                            <div className="mt-0.5 text-slate-500">({formatBlueprintDate(product.last_receive_date)})</div>
+                            <div className="mt-0.5 text-slate-500">({formatReceiveDate(product.last_receive_date)})</div>
+                            {(product.last_receive_reference || product.last_receive_reference_id) && (
+                              <span
+                                tabIndex={0}
+                                className="mt-0.5 inline-block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-brand-blue underline decoration-dotted underline-offset-2 focus-visible:outline focus-visible:outline-1 focus-visible:outline-blue-500"
+                                title={receiveReferenceTooltip}
+                                aria-label={`Receiving reference ${product.last_receive_reference || product.last_receive_reference_id}. ${receiveReferenceTooltip.replace(/\n/g, '. ')}`}
+                              >
+                                {product.last_receive_reference || product.last_receive_reference_id}
+                              </span>
+                            )}
                           </td>
                           <td className="border border-[#ddd] px-0.5 py-2 text-center align-top">
                             {currentStock === 0

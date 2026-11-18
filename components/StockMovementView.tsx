@@ -13,6 +13,7 @@ import InventoryLogRow from './InventoryLogRow';
 import { resolveStockMovementNavigationTarget } from '../utils/stockMovementNavigation';
 import { getCentralStock } from '../utils/productStock';
 import { formatDate } from '../utils/formatUtils';
+import { formatReferenceHoverDetails } from '../utils/referenceHoverDetails';
 
 const TRANSACTION_TYPES = ['Purchase Order', 'Invoice', 'Order Slip', 'Transfer Product', 'Transfer Receipt', 'Credit Memo', 'Stock Adjustment'];
 // Selectable warehouses for the movement filter. 'all' shows every warehouse
@@ -453,18 +454,28 @@ const StockMovementView: React.FC = () => {
   const renderLegacyMovementRow = (log: InventoryLogWithProduct) => {
     const isStockIn = log.status_indicator === '+';
     const sourceText = log.processed_by || log.reference_no || '-';
+    const referenceDetails = formatReferenceHoverDetails({
+      reference: log.reference_no,
+      documentNumber: log.document_number,
+      documentDate: log.document_date,
+      createdAt: log.reference_created_at,
+      createdAtSource: log.reference_created_at_source,
+      isBackdated: log.reference_is_backdated,
+      status: log.document_status,
+    });
     const canNavigate = resolveStockMovementNavigationTarget(log) !== null;
     const source = canNavigate ? (
       <button
         type="button"
         onClick={() => handleReferenceClick(log)}
         className="break-all text-left font-medium text-[#2c7da0] hover:underline"
-        title={`Navigate to ${log.transaction_type}`}
+        title={`${referenceDetails}\n\nActivate to navigate to ${log.transaction_type}`}
+        aria-label={`${log.reference_no}. ${referenceDetails.replace(/\n/g, '. ')}`}
       >
         {sourceText}
       </button>
     ) : (
-      <span>{sourceText}</span>
+      <span title={referenceDetails} tabIndex={log.reference_no ? 0 : undefined}>{sourceText}</span>
     );
 
     return (
@@ -1311,18 +1322,28 @@ const StockMovementView: React.FC = () => {
                         {logs.map((log) => {
                           const isStockIn = log.status_indicator === '+';
                           const sourceText = log.processed_by || log.reference_no || '-';
+                          const referenceDetails = formatReferenceHoverDetails({
+                            reference: log.reference_no,
+                            documentNumber: log.document_number,
+                            documentDate: log.document_date,
+                            createdAt: log.reference_created_at,
+                            createdAtSource: log.reference_created_at_source,
+                            isBackdated: log.reference_is_backdated,
+                            status: log.document_status,
+                          });
                           const canNavigate = resolveStockMovementNavigationTarget(log) !== null;
                           const source = canNavigate ? (
                             <button
                               type="button"
                               onClick={() => handleReferenceClick(log)}
                               className="text-brand-blue hover:underline font-medium"
-                              title={`Navigate to ${log.transaction_type}`}
+                              title={`${referenceDetails}\n\nActivate to navigate to ${log.transaction_type}`}
+                              aria-label={`${log.reference_no}. ${referenceDetails.replace(/\n/g, '. ')}`}
                             >
                               {sourceText}
                             </button>
                           ) : (
-                            <span>{sourceText}</span>
+                            <span title={referenceDetails} tabIndex={log.reference_no ? 0 : undefined}>{sourceText}</span>
                           );
 
                           return (

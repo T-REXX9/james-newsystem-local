@@ -96,6 +96,14 @@ const normalizeApiProduct = (raw: any): Product => ({
     : [],
   last_receive_quantity: toNumber(raw?.last_receive_quantity),
   last_receive_date: String(raw?.last_receive_date ?? ''),
+  last_receive_reference: String(raw?.last_receive_reference ?? ''),
+  last_receive_reference_id: String(raw?.last_receive_reference_id ?? ''),
+  last_receive_created_at: String(raw?.last_receive_created_at ?? ''),
+  last_receive_created_at_source: String(raw?.last_receive_created_at_source ?? ''),
+  last_receive_is_backdated: raw?.last_receive_is_backdated === null || raw?.last_receive_is_backdated === undefined
+    ? null
+    : toNumber(raw.last_receive_is_backdated),
+  last_receive_status: String(raw?.last_receive_status ?? ''),
   incident_report_count: toNumber(raw?.incident_report_count),
   return_report_count: toNumber(raw?.return_report_count),
   last_price_update: String(raw?.last_price_update ?? ''),

@@ -535,6 +535,12 @@ export interface Product {
   }>;
   last_receive_quantity?: number;
   last_receive_date?: string;
+  last_receive_reference?: string;
+  last_receive_reference_id?: string;
+  last_receive_created_at?: string;
+  last_receive_created_at_source?: string;
+  last_receive_is_backdated?: number | null;
+  last_receive_status?: string;
   incident_report_count?: number;
   return_report_count?: number;
   last_price_update?: string;
@@ -565,6 +571,12 @@ export interface InventoryLog {
   is_deleted?: boolean;
   deleted_at?: string;
   balance?: number;
+  document_number?: string;
+  document_date?: string;
+  reference_created_at?: string;
+  reference_created_at_source?: string;
+  reference_is_backdated?: number | null;
+  document_status?: string;
 }
 
 export interface InventoryLogWithProduct extends InventoryLog {
