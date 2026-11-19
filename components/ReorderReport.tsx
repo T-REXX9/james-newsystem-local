@@ -104,6 +104,7 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
       let targetPrId = existingPrId;
       let targetPrNumber = pendingPRs.find((row) => row.id === existingPrId)?.pr_number || existingPrId;
       const prItems = mapItemsForPR(supplierId);
+      const workflowNotices: string[] = [];
 
       if (mode === 'new') {
         const prNumber = await purchaseRequestService.generatePRNumber();
@@ -116,10 +117,21 @@ const AddToPrModal: React.FC<AddToPrModalProps> = ({ items, supplierChoiceById, 
           items: prItems,
         });
         targetPrId = String(created?.id || '');
+        if (created?.workflow_notice) workflowNotices.push(created.workflow_notice);
       } else {
         for (const item of prItems) {
-          await purchaseRequestService.addPRItem(existingPrId, item as any);
+          const notice = await purchaseRequestService.addPRItem(existingPrId, item as any);
+          if (notice) workflowNotices.push(notice);
         }
+      }
+
+      if (workflowNotices.length > 0) {
+        addToast({
+          type: 'warning',
+          title: 'Existing purchasing workflow',
+          description: [...new Set(workflowNotices)].join(' '),
+          durationMs: 7000,
+        });
       }
 
       addToast({

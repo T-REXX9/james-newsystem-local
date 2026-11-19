@@ -136,6 +136,7 @@ const mapDetail = (data: any): PurchaseRequestWithItems => {
     rr_refno: String(request?.rr_refno || ''),
     rr_numbers: String(request?.rr_numbers || ''),
     rr_dates: String(request?.rr_dates || ''),
+    workflow_notice: String(data?.workflow_notice || ''),
     items: items.map((item: any) => ({
       id: String(item?.id || ''),
       pr_id: String(request?.refno || ''),
@@ -261,9 +262,9 @@ export const purchaseRequestService = {
     };
   },
 
-  async addPRItem(prId: string, item: CreatePRItemPayload): Promise<void> {
+  async addPRItem(prId: string, item: CreatePRItemPayload): Promise<string> {
     const ctx = getUserContext();
-    await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(prId)}/items`, {
+    const data = await requestApi(`${API_BASE_URL}/purchase-requests/${encodeURIComponent(prId)}/items`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -272,6 +273,7 @@ export const purchaseRequestService = {
         ...mapCreateItemPayload(item),
       }),
     });
+    return String(data?.workflow_notice || '');
   },
 
   async updatePRItem(itemId: string, updates: any): Promise<void> {

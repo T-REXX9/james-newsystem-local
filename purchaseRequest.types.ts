@@ -24,6 +24,7 @@ export interface PurchaseRequestWithItems extends PurchaseRequest {
     rr_refno?: string;
     rr_numbers?: string;
     rr_dates?: string;
+    workflow_notice?: string;
 }
 
 export interface CreatePRItemPayload {

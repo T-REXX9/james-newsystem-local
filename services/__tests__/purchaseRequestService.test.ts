@@ -40,6 +40,7 @@ describe('purchaseRequestService (local API)', () => {
             quantity: 2,
           },
         ],
+        workflow_notice: 'ITEM-1 already has an active PR workflow (PR-2600).',
       })
     );
 
@@ -52,6 +53,7 @@ describe('purchaseRequestService (local API)', () => {
 
     expect(created.id).toBe('PRREF-1');
     expect(created.items).toHaveLength(1);
+    expect(created.workflow_notice).toContain('PR-2600');
     const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(body.user_id).toBe(9);
   });
@@ -164,11 +166,11 @@ describe('purchaseRequestService (local API)', () => {
 
   it('adds, updates, and deletes purchase-request items', async () => {
     (global.fetch as any)
-      .mockImplementationOnce(() => okResponse({}))
+      .mockImplementationOnce(() => okResponse({ workflow_notice: 'ITEM-5 already has an active PO workflow (PO-2600).' }))
       .mockImplementationOnce(() => okResponse({}))
       .mockImplementationOnce(() => okResponse({}));
     const { purchaseRequestService } = await import('../purchaseRequestService');
-    await expect(purchaseRequestService.addPRItem('PRREF-5', { item_id: 'P5', quantity: 2 } as any)).resolves.toBeUndefined();
+    await expect(purchaseRequestService.addPRItem('PRREF-5', { item_id: 'P5', quantity: 2 } as any)).resolves.toContain('PO-2600');
     await expect(purchaseRequestService.updatePRItem('55', { quantity: 3, unit_cost: 10, eta_date: '2026-04-02' })).resolves.toBeUndefined();
     await expect(purchaseRequestService.deletePRItem('55')).resolves.toBeUndefined();
     expect((global.fetch as any).mock.calls.map((call: any[]) => call[1].method)).toEqual(['POST', 'PATCH', 'DELETE']);

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import { purchaseRequestService, type UnpostCascadeSummary } from '../../services/purchaseRequestService';
-import type { Contact, CreatePRPayload, Product, PurchaseRequestWithItems } from '../../purchaseRequest.types';
+import type { Contact, CreatePRItemPayload, CreatePRPayload, Product, PurchaseRequestWithItems } from '../../purchaseRequest.types';
 import PurchaseRequestList from './PurchaseRequestList';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestDetail from './PurchaseRequestView';
@@ -135,6 +135,7 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
 
   const handleCreateSubmit = async (payload: CreatePRPayload) => {
     const newPR = await purchaseRequestService.createPurchaseRequest(payload);
+    if (newPR.workflow_notice) addToast({ type: 'warning', title: 'Existing purchasing workflow', description: newPR.workflow_notice, durationMs: 7000 });
     setRequests(current => [newPR, ...current.filter(request => request.id !== newPR.id)]);
     setSelectedRequest(newPR);
     setViewMode('detail');
@@ -235,7 +236,8 @@ const PurchaseRequestModule: React.FC<PurchaseRequestModuleProps> = ({ initialPR
   const handleAddItem = async (item: Record<string, unknown>) => {
     if (!selectedRequest) return;
     try {
-      await purchaseRequestService.addPRItem(selectedRequest.id, item);
+      const workflowNotice = await purchaseRequestService.addPRItem(selectedRequest.id, item as CreatePRItemPayload);
+      if (workflowNotice) addToast({ type: 'warning', title: 'Existing purchasing workflow', description: workflowNotice, durationMs: 7000 });
       setSelectedRequest(await purchaseRequestService.getPurchaseRequestById(selectedRequest.id));
     } catch (error) {
       if (shouldSuppressAuthError(error)) return;
