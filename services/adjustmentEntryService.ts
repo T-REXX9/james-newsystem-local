@@ -158,6 +158,7 @@ export const adjustmentEntryService = {
   async update(refno: string, payload: {
     customerId?: string;
     date?: string;
+    type?: 'Debit' | 'Credit';
     amount?: number;
     remark?: string;
   }): Promise<AdjustmentEntry> {
@@ -169,6 +170,7 @@ export const adjustmentEntryService = {
         main_id: ctx.mainId,
         ...(payload.customerId !== undefined ? { customer_id: payload.customerId } : {}),
         ...(payload.date !== undefined ? { date: payload.date } : {}),
+        ...(payload.type !== undefined ? { type: payload.type } : {}),
         ...(payload.amount !== undefined ? { amount: payload.amount } : {}),
         ...(payload.remark !== undefined ? { remark: payload.remark } : {}),
       }),

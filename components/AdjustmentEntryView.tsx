@@ -300,6 +300,7 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
       const updated = await adjustmentEntryService.update(selected.lrefno, {
         customerId: form.customerId,
         date: resolvedDate,
+        type: form.type === 'Debit' || form.type === 'Credit' ? form.type : undefined,
         amount: isZeroOut ? undefined : Number(form.amount || 0),
         remark: form.remark,
       });
@@ -454,6 +455,11 @@ const AdjustmentEntryView: React.FC<AdjustmentEntryViewProps> = ({ initialAdjust
                       <option value="Debit">Debit</option>
                       <option value="Credit">Credit</option>
                       <option value="Zero-Out">Zero-Out</option>
+                    </select>
+                  ) : canEdit && !isZeroOut ? (
+                    <select aria-label="Type" value={form.type} onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as AdjustmentType }))} className="h-[34px] rounded-[3px] border border-[#ccc] bg-white px-3">
+                      <option value="Debit">Debit</option>
+                      <option value="Credit">Credit</option>
                     </select>
                   ) : <span>{form.type}</span>}
 
