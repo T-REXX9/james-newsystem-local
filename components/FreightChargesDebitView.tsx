@@ -247,11 +247,6 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
       setRows(data.items);
       setTotalPages(Math.max(1, data.meta.total_pages || 1));
 
-      if (isCreating) return;
-
-      if (selectedRefno && selectedRefno !== initialFreightRefNo && !data.items.some((row) => row.lrefno === selectedRefno)) {
-        setSelectedRefno('');
-      }
     } catch (err: any) {
       if (shouldSuppressAuthError(err)) return;
       setError(err?.message || 'Failed to load freight charges');
@@ -268,6 +263,15 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
     try {
       const item = await freightChargesService.show(refno);
       setSelected(item);
+      if (item.lrefno && item.lrefno !== refno) setSelectedRefno(item.lrefno);
+      const recordDate = toDateInput(item.ldate);
+      const [recordYear, recordMonth] = recordDate.split('-');
+      if (initialFreightRefNo && recordYear && recordMonth) {
+        setYear(recordYear);
+        setMonth(recordMonth);
+        setAppliedYear(recordYear);
+        setAppliedMonth(recordMonth);
+      }
       setForm({
         customerId: item.lcustomer || '',
         date: toDateInput(item.ldate),
@@ -373,6 +377,12 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
   useEffect(() => {
     fetchSourceDocuments();
   }, []);
+
+  useEffect(() => {
+    setIsCreating(initialCreate);
+    setSelectedRefno(initialCreate ? '' : initialFreightRefNo || '');
+    setPage(1);
+  }, [initialFreightRefNo, initialCreate]);
 
   useEffect(() => {
     if (!form.transactionRefNo || !sourceDocs.length) {

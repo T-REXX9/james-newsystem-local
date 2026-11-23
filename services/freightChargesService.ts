@@ -154,7 +154,8 @@ export const freightChargesService = {
   },
 
   async show(refno: string): Promise<FreightCharge> {
-    const data = await requestApi(`${API_BASE_URL}/freight-charges/${encodeURIComponent(refno)}`);
+    const ctx = getContext();
+    const data = await requestApi(`${API_BASE_URL}/freight-charges/${encodeURIComponent(refno)}?main_id=${encodeURIComponent(String(ctx.mainId))}`);
     return mapEntry(data || {});
   },
 
