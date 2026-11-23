@@ -79,6 +79,16 @@ const sendDoNotContactSalesReportEntry = (
   statusNote: isStatusNote,
 });
 
+const sendDoNotCallSalesReportEntry = (
+  contactId: string,
+  reason: string,
+  currentUser: UserProfile | null | undefined,
+) => sendSalesReportMessage({
+  contactId,
+  body: `Do Not Call\nReason: ${reason}`,
+  senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+});
+
 const sendPriorityListOverrideSalesReportEntry = (
   contactId: string,
   enabled: boolean,
@@ -656,6 +666,24 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setSelectedDoNotCallIds(new Set());
   }, []);
 
+  const loadRows = useCallback(async (withLoading = true, forceRefresh = false) => {
+    const sequence = ++loadSequence.current;
+    if (withLoading && (forceRefresh || rowsRef.current.length === 0)) setLoading(true);
+    setError(null);
+    try {
+      // Always fetch the full master list; search filters client-side so typing stays instant.
+      const result = await fetchDailyCallMasterList({ fromDate, search: '', forceRefresh });
+      if (sequence !== loadSequence.current) return;
+      setRows(result.items);
+      setPendingDuplicateProspects((result.pendingDuplicateProspects || []).filter(row => !reviewedDuplicateIds.current.has(row.requestId)));
+      setMeta(result.meta);
+    } catch {
+      if (sequence === loadSequence.current) setError('Unable to load master list.');
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false);
+    }
+  }, []);
+
   const handleToggleCustomerStar = useCallback(async (row: DailyCallMasterCustomerRow) => {
     if (!isMasterUserAccount(currentUser) || savingStarId) return;
     const isStarred = !row.isStarred;
@@ -712,13 +740,27 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
         : item));
       setPendingDoNotCallRow(null);
       setDoNotCallReason('');
-      addToast({ type: 'success', title: 'Do Not Call marked', description: `${row.shopName} was updated.` });
+      let reportEntryFailed = false;
+      try {
+        await sendDoNotCallSalesReportEntry(row.id, cleanReason, currentUser);
+      } catch {
+        reportEntryFailed = true;
+      }
+      invalidateDailyCallMasterListCache();
+      await loadRows(false, true);
+      addToast({
+        type: reportEntryFailed ? 'warning' : 'success',
+        title: reportEntryFailed ? 'Do Not Call marked; report entry missing' : 'Do Not Call marked',
+        description: reportEntryFailed
+          ? `${row.shopName} was marked, but its reason could not be added to Agent Sales Report.`
+          : `${row.shopName} was updated and the reason was added to Agent Sales Report.`,
+      });
     } catch (error) {
       addToast({ type: 'error', title: 'Unable to update Do Not Call', description: getUserFacingErrorMessage(error, 'Please try again.') });
     } finally {
       setSavingDoNotCallId(null);
     }
-  }, [addToast, currentUser, savingDoNotCallId]);
+  }, [addToast, currentUser, loadRows, savingDoNotCallId]);
 
   const handleConfirmDoNotCall = useCallback(() => {
     const reason = doNotCallReasonOption === 'Other reasons' ? doNotCallCustomReason.trim() : doNotCallReasonOption;
@@ -733,6 +775,9 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
     setSavingBulkDoNotCall(true);
     try {
       const markedCount = await setDailyCallDoNotContactFlagsBulk(selectedRows.map((row) => row.id), reason, bulkDoNotCallReasonOption);
+      const reportResults = await Promise.allSettled(selectedRows.map((row) =>
+        sendDoNotCallSalesReportEntry(row.id, reason, currentUser)));
+      const reportFailureCount = reportResults.filter((result) => result.status === 'rejected').length;
       const selectedIds = new Set(selectedRows.map((row) => row.id));
       setRows((current) => current.map((row) => selectedIds.has(row.id)
         ? { ...row, doNotContact: true, doNotContactReason: reason }
@@ -742,17 +787,21 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
       setBulkDoNotCallReason('');
       setBulkDoNotCallReasonOption('');
       setBulkDoNotCallCustomReason('');
+      invalidateDailyCallMasterListCache();
+      await loadRows(false, true);
       addToast({
-        type: 'success',
-        title: 'Do Not Call applied',
-        description: `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked with the shared reason.`,
+        type: reportFailureCount ? 'warning' : 'success',
+        title: reportFailureCount ? 'Do Not Call applied; some report entries are missing' : 'Do Not Call applied',
+        description: reportFailureCount
+          ? `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked; ${reportFailureCount} reason${reportFailureCount === 1 ? '' : 's'} could not be added to Agent Sales Report.`
+          : `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked and the shared reason was added to Agent Sales Report.`,
       });
     } catch (error) {
       addToast({ type: 'error', title: 'Unable to mark selected customers', description: getUserFacingErrorMessage(error, 'No customers were changed. Please try again.') });
     } finally {
       setSavingBulkDoNotCall(false);
     }
-  }, [addToast, bulkDoNotCallCustomReason, bulkDoNotCallReasonOption, currentUser, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
+  }, [addToast, bulkDoNotCallCustomReason, bulkDoNotCallReasonOption, currentUser, loadRows, rows, savingBulkDoNotCall, selectedDoNotCallIds]);
 
   const handleConfirmBulkOverride = useCallback(async () => {
     const reason = bulkOverrideReason.trim();
@@ -818,24 +867,6 @@ const DailyCallMasterListView: React.FC<DailyCallMasterListViewProps> = ({ curre
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
-
-  const loadRows = useCallback(async (withLoading = true, forceRefresh = false) => {
-    const sequence = ++loadSequence.current;
-    if (withLoading && (forceRefresh || rowsRef.current.length === 0)) setLoading(true);
-    setError(null);
-    try {
-      // Always fetch the full master list; search filters client-side so typing stays instant.
-      const result = await fetchDailyCallMasterList({ fromDate, search: '', forceRefresh });
-      if (sequence !== loadSequence.current) return;
-      setRows(result.items);
-      setPendingDuplicateProspects((result.pendingDuplicateProspects || []).filter(row => !reviewedDuplicateIds.current.has(row.requestId)));
-      setMeta(result.meta);
-    } catch {
-      if (sequence === loadSequence.current) setError('Unable to load master list.');
-    } finally {
-      if (sequence === loadSequence.current) setLoading(false);
-    }
-  }, []);
 
   const openDuplicateComparison = async (pending: PendingDuplicateProspect) => {
     const sequence = ++duplicateComparisonSequence.current;

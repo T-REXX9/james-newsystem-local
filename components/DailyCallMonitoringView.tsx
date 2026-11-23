@@ -64,6 +64,7 @@ import {
   fetchDailySubmittedSalesReportContactIds,
   fetchSalesReportDirectoryState,
   releaseCustomerCallForDailyCall,
+  sendSalesReportMessage,
   setDailyCallBookmark,
   setDailyCallDoNotContactFlag,
   setDailyCallDoNotContactFlagsBulk,
@@ -2129,13 +2130,30 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setPendingDoNotCallContact(null);
       setDoNotCallReason('');
       setDoNotCallCustomReason('');
-      addToast({ type: 'success', title: 'Do Not Call marked', description: `${company} was updated.` });
+      let reportEntryFailed = false;
+      try {
+        await sendSalesReportMessage({
+          contactId: id,
+          body: `Do Not Call\nReason: ${reason}`,
+          senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+        });
+      } catch {
+        reportEntryFailed = true;
+      }
+      await loadAgentData();
+      addToast({
+        type: reportEntryFailed ? 'warning' : 'success',
+        title: reportEntryFailed ? 'Do Not Call marked; report entry missing' : 'Do Not Call marked',
+        description: reportEntryFailed
+          ? `${company} was marked, but its reason could not be added to Agent Sales Report.`
+          : `${company} was updated and the reason was added to Agent Sales Report.`,
+      });
     } catch {
       addToast({ type: 'error', title: 'Unable to update Do Not Call', description: 'Please try again.' });
     } finally {
       setSavingDoNotCallId(null);
     }
-  }, [addToast, canManageDoNotCall, doNotCallCustomReason, doNotCallReason, pendingDoNotCallContact, savingDoNotCallId]);
+  }, [addToast, canManageDoNotCall, currentUser?.email, currentUser?.full_name, doNotCallCustomReason, doNotCallReason, loadAgentData, pendingDoNotCallContact, savingDoNotCallId]);
 
   const handleConfirmBulkDoNotCall = useCallback(async () => {
     const reason = bulkBlacklistReason === 'Other reasons' ? bulkBlacklistCustomReason.trim() : bulkBlacklistReason;
@@ -2144,6 +2162,13 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
     setSavingBulkBlacklist(true);
     try {
       const markedCount = await setDailyCallDoNotContactFlagsBulk(contactIds, reason, bulkBlacklistReason);
+      const reportResults = await Promise.allSettled(contactIds.map((contactId) =>
+        sendSalesReportMessage({
+          contactId,
+          body: `Do Not Call\nReason: ${reason}`,
+          senderName: currentUser?.full_name || currentUser?.email || 'Staff',
+        })));
+      const reportFailureCount = reportResults.filter((result) => result.status === 'rejected').length;
       setMasterListRows(rows => rows.map(row => selectedForBlacklist.has(row.id)
         ? { ...row, doNotContact: true, doNotContactReason: reason }
         : row));
@@ -2151,13 +2176,20 @@ const DailyCallMonitoringView: React.FC<DailyCallMonitoringViewProps> = ({ curre
       setBulkBlacklistDialogOpen(false);
       setBulkBlacklistReason('');
       setBulkBlacklistCustomReason('');
-      addToast({ type: 'success', title: 'Do Not Call applied', description: `${markedCount} customer${markedCount === 1 ? '' : 's'} updated.` });
+      await loadAgentData();
+      addToast({
+        type: reportFailureCount ? 'warning' : 'success',
+        title: reportFailureCount ? 'Do Not Call applied; some report entries are missing' : 'Do Not Call applied',
+        description: reportFailureCount
+          ? `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked; ${reportFailureCount} reason${reportFailureCount === 1 ? '' : 's'} could not be added to Agent Sales Report.`
+          : `${markedCount} customer${markedCount === 1 ? '' : 's'} were marked and the shared reason was added to Agent Sales Report.`,
+      });
     } catch (error) {
       addToast({ type: 'error', title: 'Unable to update Do Not Call', description: error instanceof Error ? error.message : 'Please try again.' });
     } finally {
       setSavingBulkBlacklist(false);
     }
-  }, [addToast, bulkBlacklistCustomReason, bulkBlacklistReason, canManageDoNotCall, savingBulkBlacklist, selectedForBlacklist]);
+  }, [addToast, bulkBlacklistCustomReason, bulkBlacklistReason, canManageDoNotCall, currentUser?.email, currentUser?.full_name, loadAgentData, savingBulkBlacklist, selectedForBlacklist]);
 
   const handleMasterRowCall = useCallback((contact: Contact) => {
     handleOpenCallContact(contact);

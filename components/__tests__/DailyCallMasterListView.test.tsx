@@ -1127,6 +1127,9 @@ describe('DailyCallMasterListView', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Call' }));
 
     expect(setDailyCallDoNotContactFlag).toHaveBeenCalledWith('priority-1', true, 'Not interested', 'Not interested');
+    expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
+      contactId: 'priority-1', body: 'Do Not Call\nReason: Not interested',
+    }));
   });
 
   it('marks selected customers as Do Not Call in one request with a shared reason', async () => {
@@ -1561,29 +1564,36 @@ describe('DailyCallMasterListView', () => {
 
   it('marks a buyer do-not-contact without changing verification fields', async () => {
     const user = userEvent.setup();
+    const buyer = {
+      id: 'priority-1',
+      shopName: 'Priority Buyer Shop',
+      province: 'Manila',
+      city: 'Manila',
+      contactNumber: '0930',
+      assignedTo: 'Joan Jerusalem',
+      verification: 'Verified',
+      verifiedBy: 'Master User',
+      verifiedInSystem: true,
+      lastPurchaseDate: 'May 26, 2026',
+      lastPurchaseDateRaw: '2026-05-26',
+      purchaseCount: 1,
+      listCategory: 'priority',
+      totalSales: 5000,
+      currentMonthSales: 0,
+      daysSinceLastPurchase: 20,
+      monthsSinceLastPurchase: 0,
+      purchaseAgeGroup: 'two_weeks_to_one_month',
+    };
     vi.mocked(fetchDailyCallMasterList)
       .mockResolvedValueOnce({
         meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
-        items: [{
-          id: 'priority-1',
-          shopName: 'Priority Buyer Shop',
-          province: 'Manila',
-          city: 'Manila',
-          contactNumber: '0930',
-          assignedTo: 'Joan Jerusalem',
-          verification: 'Verified',
-          verifiedBy: 'Master User',
-          verifiedInSystem: true,
-          lastPurchaseDate: 'May 26, 2026',
-          lastPurchaseDateRaw: '2026-05-26',
-          purchaseCount: 1,
-          listCategory: 'priority',
-          totalSales: 5000,
-          currentMonthSales: 0,
-          daysSinceLastPurchase: 20,
-          monthsSinceLastPurchase: 0,
-          purchaseAgeGroup: 'two_weeks_to_one_month',
-        }],
+        items: [buyer],
+        pendingDuplicateProspects: [],
+      })
+      .mockResolvedValue({
+        meta: { fromDate: '2025-10-01', toDate: '2026-06-15', count: 1 },
+        items: [{ ...buyer, doNotContact: true, doNotContactReason: 'No longer operating' }],
+        pendingDuplicateProspects: [],
       });
     vi.mocked(updateContact).mockResolvedValue(undefined);
 
@@ -1598,6 +1608,9 @@ describe('DailyCallMasterListView', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Apply to 1 customers' }));
 
     expect(setDailyCallDoNotContactFlagsBulk).toHaveBeenCalledWith(['priority-1'], 'No longer operating', 'Other reasons');
+    expect(sendSalesReportMessage).toHaveBeenCalledWith(expect.objectContaining({
+      contactId: 'priority-1', body: 'Do Not Call\nReason: No longer operating',
+    }));
     expect(updateContact).not.toHaveBeenCalled();
     expect(createCustomerLogForDailyCall).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Remove Priority Buyer Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');

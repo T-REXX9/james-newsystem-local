@@ -20,6 +20,7 @@ const releaseCustomerCallForDailyCallMock = vi.fn();
 const setDailyCallBookmarkMock = vi.fn();
 const setDailyCallDoNotContactFlagMock = vi.fn();
 const setDailyCallDoNotContactFlagsBulkMock = vi.fn();
+const sendSalesReportMessageMock = vi.fn();
 const createCustomerLogForDailyCallMock = vi.fn();
 const subscribeToDailyCallMonitoringUpdatesMock = vi.fn(() => () => {});
 const createContactMock = vi.fn();
@@ -53,6 +54,7 @@ vi.mock('../../services/dailyCallMonitoringService', () => ({
   setDailyCallBookmark: (...args: unknown[]) => setDailyCallBookmarkMock(...args),
   setDailyCallDoNotContactFlag: (...args: unknown[]) => setDailyCallDoNotContactFlagMock(...args),
   setDailyCallDoNotContactFlagsBulk: (...args: unknown[]) => setDailyCallDoNotContactFlagsBulkMock(...args),
+  sendSalesReportMessage: (...args: unknown[]) => sendSalesReportMessageMock(...args),
   createCustomerLogForDailyCall: (...args: unknown[]) => createCustomerLogForDailyCallMock(...args),
   subscribeToDailyCallMonitoringUpdates: (...args: unknown[]) => subscribeToDailyCallMonitoringUpdatesMock(...args),
 }));
@@ -174,6 +176,8 @@ describe('DailyCallMonitoringView communication actions', () => {
     setDailyCallBookmarkMock.mockReset();
     setDailyCallDoNotContactFlagMock.mockReset();
     setDailyCallDoNotContactFlagsBulkMock.mockReset();
+    sendSalesReportMessageMock.mockReset();
+    sendSalesReportMessageMock.mockResolvedValue({});
     setDailyCallDoNotContactFlagsBulkMock.mockImplementation(async (ids: string[]) => ids.length);
     createCustomerLogForDailyCallMock.mockReset();
     subscribeToDailyCallMonitoringUpdatesMock.mockClear();
@@ -530,12 +534,18 @@ describe('DailyCallMonitoringView communication actions', () => {
 
   it('requires one of the reason options and saves Other reasons custom text for a master user', async () => {
     const user = userEvent.setup();
-    fetchAgentSnapshotForDailyCallMock.mockResolvedValue({
+    const snapshot = {
       ...baseSnapshot,
       contacts: [{ ...baseSnapshot.contacts[0], status: 'active' }],
       purchases: [{ id: 'p1', contact_id: 'contact-1', amount: 100, status: 'paid', purchased_at: new Date().toISOString() }],
       masterList: [{ id: 'contact-1', shopName: 'Test Shop', listCategory: 'priority', purchaseCount: 1, lastPurchaseDateRaw: new Date().toISOString() }],
-    });
+    };
+    fetchAgentSnapshotForDailyCallMock
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValue({
+        ...snapshot,
+        masterList: [{ ...snapshot.masterList[0], doNotContact: true, doNotContactReason: 'Customer requested no further contact' }],
+      });
     setDailyCallDoNotContactFlagMock.mockResolvedValue(true);
 
     render(<DailyCallMonitoringView currentUser={{ ...currentUser, user_type: '1' }} />);
@@ -552,6 +562,9 @@ describe('DailyCallMonitoringView communication actions', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Mark Do Not Call' }));
 
     expect(setDailyCallDoNotContactFlagMock).toHaveBeenCalledWith('contact-1', true, 'Customer requested no further contact', 'Other reasons');
+    expect(sendSalesReportMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+      contactId: 'contact-1', body: 'Do Not Call\nReason: Customer requested no further contact',
+    }));
     expect(await screen.findByRole('button', { name: 'Remove Test Shop Do Not Call' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -577,6 +590,10 @@ describe('DailyCallMonitoringView communication actions', () => {
     await user.type(within(dialog).getByLabelText('Custom reason'), 'Shared bulk custom reason');
     await user.click(within(dialog).getByRole('button', { name: 'Apply to selected customers' }));
     await waitFor(() => expect(setDailyCallDoNotContactFlagsBulkMock).toHaveBeenCalledWith(contacts.map(contact => contact.id), 'Shared bulk custom reason', 'Other reasons'));
+    expect(sendSalesReportMessageMock).toHaveBeenCalledTimes(10);
+    expect(sendSalesReportMessageMock).toHaveBeenCalledWith(expect.objectContaining({
+      contactId: 'bulk-1', body: 'Do Not Call\nReason: Shared bulk custom reason',
+    }));
     expect(addToastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'success', title: 'Do Not Call applied' }));
   });
 
