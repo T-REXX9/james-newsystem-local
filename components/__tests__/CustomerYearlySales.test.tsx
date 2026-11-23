@@ -112,6 +112,8 @@ describe('CustomerYearlySales', () => {
     expect(yearTicks[0]).toBe('1994');
     expect(yearTicks[yearTicks.length - 1]).toBe('2025');
     expect(yearTicks).toEqual(Array.from({ length: 32 }, (_, index) => String(1994 + index)));
-    expect(chart.querySelector('.recharts-responsive-container')?.parentElement).toHaveStyle({ minWidth: '2048px' });
+    const chartSizingTrack = chart.querySelector('.recharts-responsive-container')?.parentElement;
+    expect(chartSizingTrack).toHaveStyle({ minWidth: '2048px' });
+    expect(chartSizingTrack).toHaveClass('grid', 'grid-cols-1', 'min-w-0');
   });
 });

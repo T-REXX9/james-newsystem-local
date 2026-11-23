@@ -136,7 +136,7 @@ const CustomerYearlySales: React.FC<CustomerYearlySalesProps> = ({
                 data-year-count={chartYears.length}
               >
                 <span className="sr-only">{chartAccessibleSummary}</span>
-                <div className="h-full" style={{ minWidth: `${Math.max(240, chartYears.length * 64)}px` }}>
+                <div className="grid h-full min-w-0 grid-cols-1" style={{ minWidth: `${Math.max(240, chartYears.length * 64)}px` }}>
                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <AreaChart data={chartYears} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                     <defs>
