@@ -1186,7 +1186,7 @@ describe('SalesInquiryView', () => {
     expect(screen.queryByText('Price Group:')).not.toBeInTheDocument();
   });
 
-  it('shows VIP Silver discount and TOTAL to pay on a qualifying first inquiry', async () => {
+  it('shows VIP Silver discount on a qualifying inquiry before the month is redeemed', async () => {
     const user = userEvent.setup();
     getLedgerMock.mockResolvedValue({
       metrics: {
@@ -1263,6 +1263,48 @@ describe('SalesInquiryView', () => {
       expect(screen.getByText('TOTAL to pay :')).toBeInTheDocument();
       expect(screen.getByText('6804.00')).toBeInTheDocument();
     });
+  });
+
+  it('hides VIP Silver discount after an order slip or invoice redeemed the month', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      id: 'inq-after-redemption',
+      inquiry_no: 'INQ26-20479',
+      contact_id: 'c-1',
+      sales_date: '2026-09-30',
+      grand_total: 1000,
+      items: [{
+        id: 'item-after-redemption',
+        inquiry_id: 'inq-after-redemption',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 1000,
+        amount: 1000,
+        remark: '',
+        approval_status: 'approved',
+      }],
+    });
+    getLedgerMock.mockResolvedValue({
+      metrics: {
+        last_month_sales: 15000,
+        vip_silver_discount_redeemed_months: ['2026-09'],
+      },
+      summary_rows: [],
+    });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView today={new Date('2026-09-30T00:00:00')} />);
+    await user.click(await screen.findByText('INQ26-20479'));
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalled());
+
+    expect(screen.queryByText('10% VIP SILVER = 100.00')).not.toBeInTheDocument();
+    expect(screen.queryByText('TOTAL to pay :')).not.toBeInTheDocument();
+    expect(screen.getAllByText('1000.00').length).toBeGreaterThan(0);
   });
 
   it('shows VIP Gold discount and TOTAL to pay on a new qualifying inquiry', async () => {

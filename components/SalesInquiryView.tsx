@@ -335,11 +335,13 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     ishinomotoSales: number | null;
     currentMonthSales: number | null;
     lastMonthSales: number | null;
+    vipSilverDiscountRedeemedMonths: string[];
     summaryRows: Array<{ year: number; month: number; debit: number }>;
   }>({
     ishinomotoSales: null,
     currentMonthSales: null,
     lastMonthSales: null,
+    vipSilverDiscountRedeemedMonths: [],
     summaryRows: [],
   });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -404,12 +406,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   useEffect(() => {
     const customerId = selectedCustomer?.id;
     if (!customerId) {
-      setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
+      setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, vipSilverDiscountRedeemedMonths: [], summaryRows: [] });
       return;
     }
 
     let cancelled = false;
-    setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
+    setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, vipSilverDiscountRedeemedMonths: [], summaryRows: [] });
     void customerLedgerService
       .getLedger(customerId, { reportType: 'summary', dateType: 'all' })
       .then((ledger) => {
@@ -418,6 +420,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           ishinomotoSales: ledger.metrics.ishinomoto_sales,
           currentMonthSales: ledger.metrics.monthly_sales,
           lastMonthSales: ledger.metrics.last_month_sales,
+          vipSilverDiscountRedeemedMonths: ledger.metrics.vip_silver_discount_redeemed_months || [],
           summaryRows: (ledger.summary_rows || []).map((row) => ({
             year: Number(row.year || 0),
             month: Number(row.month || 0),
@@ -427,7 +430,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       })
       .catch(() => {
         if (!cancelled) {
-          setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, summaryRows: [] });
+          setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, vipSilverDiscountRedeemedMonths: [], summaryRows: [] });
         }
       });
 
@@ -1066,19 +1069,6 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       deleted: Boolean(selectedInquiry?.is_deleted),
     };
     const monthKey = benefitMonthKey(salesDate);
-    const customerDocumentsInBenefitMonth: VipDealDocument[] = inquiries
-      .filter((inquiry) => {
-        if (!selectedCustomer?.id || inquiry.contact_id !== selectedCustomer.id) return false;
-        return benefitMonthKey(inquiry.sales_date) === monthKey;
-      })
-      .map((inquiry) => ({
-        id: inquiry.id,
-        kind: 'sales_inquiry' as const,
-        salesDate: inquiry.sales_date,
-        cancelled: inquiry.status === SalesInquiryStatus.CANCELLED || Boolean(inquiry.replaced_by_refno) || inquiry.id === replacementSourceId,
-        deleted: Boolean(inquiry.is_deleted),
-      }));
-
     const lastMonthSpend = resolveLastMonthSpendForVipDocument({
       salesDate,
       lastMonthSales: postedSales.lastMonthSales,
@@ -1091,12 +1081,12 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       lastMonthSpend,
       vipConfig,
       current,
-      customerDocumentsInBenefitMonth,
+      silverDiscountRedeemed: postedSales.vipSilverDiscountRedeemedMonths.includes(monthKey),
     });
   }, [
     grandTotal,
-    inquiries,
     postedSales.lastMonthSales,
+    postedSales.vipSilverDiscountRedeemedMonths,
     postedSales.summaryRows,
     salesDate,
     selectedCustomer?.id,

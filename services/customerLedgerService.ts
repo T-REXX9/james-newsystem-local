@@ -34,6 +34,7 @@ export type CustomerLedgerMetrics = {
   old_name: string | null;
   price_code: string | null;
   vip_status: string | null;
+  vip_silver_discount_redeemed_months?: string[];
   aging: {
     current: number;
     days_31_60: number;
@@ -298,6 +299,9 @@ export const customerLedgerService = {
         old_name: data?.metrics?.old_name || null,
         price_code: data?.metrics?.price_code || null,
         vip_status: data?.metrics?.vip_status || null,
+        vip_silver_discount_redeemed_months: Array.isArray(data?.metrics?.vip_silver_discount_redeemed_months)
+          ? data.metrics.vip_silver_discount_redeemed_months.map(String)
+          : [],
         aging: {
           current: toNumber(data?.metrics?.aging?.current),
           days_31_60: toNumber(data?.metrics?.aging?.days_31_60),

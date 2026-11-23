@@ -51,72 +51,43 @@ describe('shouldApplyVipOnDocument', () => {
     ...overrides,
   });
 
-  it('applies VIP Gold on every deal in the benefit month', () => {
-    expect(
-      shouldApplyVipOnDocument({
+  it('keeps VIP Gold unlimited even after a Silver benefit was redeemed', () => {
+    const documents = [
+      { id: 'inquiry-1', kind: 'sales_inquiry' as const },
+      { id: 'inquiry-2', kind: 'sales_inquiry' as const },
+      { id: 'order-slip-3', kind: 'order_slip' as const },
+    ];
+    for (const { id, kind } of documents) {
+      expect(shouldApplyVipOnDocument({
         standing: 'gold',
-        current: inquiry({ id: 'inq-2' }),
-        customerDocumentsInBenefitMonth: [inquiry({ id: 'inq-1' })],
-      })
-    ).toBe(true);
+        current: inquiry({ id, kind }),
+        silverDiscountRedeemed: true,
+      })).toBe(true);
+    }
   });
 
-  it('applies VIP Silver only on the first live deal and its converted documents', () => {
-    const first = inquiry({ id: 'inq-1', salesDate: '2026-09-01' });
-    const second = inquiry({ id: 'inq-2', salesDate: '2026-09-08' });
-    const convertedOrder: VipDealDocument = {
-      id: 'so-1',
-      kind: 'sales_order',
-      salesDate: '2026-09-01',
-      cancelled: false,
-      deleted: false,
-      inquiryId: 'inq-1',
-    };
+  it('applies Silver to every eligible inquiry until an actual document redeems it', () => {
+    const inquiry30 = inquiry({ id: 'inq-30', salesDate: '2026-09-30' });
 
-    expect(
-      shouldApplyVipOnDocument({
-        standing: 'silver',
-        current: first,
-        customerDocumentsInBenefitMonth: [first, second],
-      })
-    ).toBe(true);
-    expect(
-      shouldApplyVipOnDocument({
-        standing: 'silver',
-        current: convertedOrder,
-        customerDocumentsInBenefitMonth: [first, second, convertedOrder],
-      })
-    ).toBe(true);
-    expect(
-      shouldApplyVipOnDocument({
-        standing: 'silver',
-        current: second,
-        customerDocumentsInBenefitMonth: [first, second],
-      })
-    ).toBe(false);
-  });
-
-  it('does not let a cancelled first inquiry consume VIP Silver', () => {
-    const cancelled = inquiry({ id: 'inq-1', cancelled: true, salesDate: '2026-09-01' });
-    const live = inquiry({ id: 'inq-2', salesDate: '2026-09-08' });
-
-    expect(
-      shouldApplyVipOnDocument({
-        standing: 'silver',
-        current: live,
-        customerDocumentsInBenefitMonth: [cancelled, live],
-      })
-    ).toBe(true);
-  });
-
-  it('lets a linked replacement inherit Silver eligibility after its source is retired', () => {
-    const source = inquiry({ id: 'inq-original', cancelled: true, salesDate: '2026-09-01' });
-    const replacement = inquiry({ id: 'inq-replacement', salesDate: '2026-09-08' });
     expect(shouldApplyVipOnDocument({
       standing: 'silver',
-      current: replacement,
-      customerDocumentsInBenefitMonth: [source, replacement],
+      current: inquiry30,
+      silverDiscountRedeemed: false,
     })).toBe(true);
+    expect(shouldApplyVipOnDocument({
+      standing: 'silver',
+      current: inquiry30,
+      silverDiscountRedeemed: true,
+    })).toBe(false);
+  });
+
+  it('does not show Silver on a cancelled inquiry', () => {
+    const cancelled = inquiry({ id: 'inq-cancelled', cancelled: true });
+    expect(shouldApplyVipOnDocument({
+      standing: 'silver',
+      current: cancelled,
+      silverDiscountRedeemed: false,
+    })).toBe(false);
   });
 });
 

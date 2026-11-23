@@ -44,6 +44,7 @@ describe('customerLedgerService', () => {
       metrics: {
         last_month_sales: 18000,
         vip_status: 'silver',
+        vip_silver_discount_redeemed_months: ['2026-09'],
         vip_one_time_discount_threshold: 15000,
         vip_unlimited_discount_threshold: 45000,
       },
@@ -55,6 +56,7 @@ describe('customerLedgerService', () => {
     const ledger = await customerLedgerService.getLedger('cust-1', { reportType: 'summary', dateType: 'all' });
 
     expect(ledger.metrics.vip_status).toBe('silver');
+    expect(ledger.metrics.vip_silver_discount_redeemed_months).toEqual(['2026-09']);
     expect(ledger.metrics.vip_one_time_discount_threshold).toBe(15000);
     expect(ledger.metrics.vip_unlimited_discount_threshold).toBe(45000);
   });

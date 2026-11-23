@@ -158,58 +158,15 @@ export const computeVipDocumentDiscount = (input: {
   };
 };
 
-const isLive = (doc: VipDealDocument): boolean => !doc.cancelled && !doc.deleted;
-
-const sortKey = (doc: VipDealDocument): string => `${doc.salesDate}|${doc.id}`;
-
-const liveStarters = (docs: VipDealDocument[]): VipDealDocument[] => {
-  const live = docs.filter(isLive);
-  const inquiries = live.filter((doc) => doc.kind === 'sales_inquiry').sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  if (inquiries.length > 0) return inquiries;
-  return live
-    .filter((doc) => doc.kind === 'sales_order' && !String(doc.inquiryId || '').trim())
-    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-};
-
-const firstLiveStarter = (docs: VipDealDocument[]): VipDealDocument | null => liveStarters(docs)[0] || null;
-
-const ordersInChain = (starter: VipDealDocument, docs: VipDealDocument[]): Set<string> => {
-  const ids = new Set<string>();
-  if (starter.kind === 'sales_order') ids.add(starter.id);
-  docs.forEach((doc) => {
-    if (doc.kind !== 'sales_order' || !isLive(doc)) return;
-    if (starter.kind === 'sales_inquiry' && doc.inquiryId === starter.id) ids.add(doc.id);
-    if (starter.kind === 'sales_order' && doc.id === starter.id) ids.add(doc.id);
-  });
-  return ids;
-};
-
 export const shouldApplyVipOnDocument = (input: {
   standing: VipDiscountLevel;
   current: VipDealDocument;
-  customerDocumentsInBenefitMonth: VipDealDocument[];
+  silverDiscountRedeemed: boolean;
 }): boolean => {
   if (input.standing === 'regular') return false;
   if (input.standing === 'gold') return true;
   if (input.current.cancelled || input.current.deleted) return false;
-
-  const pool = input.customerDocumentsInBenefitMonth.some((doc) => doc.id === input.current.id)
-    ? input.customerDocumentsInBenefitMonth
-    : [...input.customerDocumentsInBenefitMonth, input.current];
-
-  const starter = firstLiveStarter(pool);
-  if (!starter) {
-    if (input.current.kind === 'sales_order' && !String(input.current.inquiryId || '').trim()) return true;
-    return false;
-  }
-
-  if (input.current.id === starter.id) return true;
-  const chainOrders = ordersInChain(starter, pool);
-  if (input.current.kind === 'sales_order' && input.current.inquiryId === starter.id) return true;
-  if ((input.current.kind === 'order_slip' || input.current.kind === 'invoice') && chainOrders.has(String(input.current.orderId || ''))) {
-    return true;
-  }
-  return false;
+  return !input.silverDiscountRedeemed;
 };
 
 export const resolveDocumentVipDiscount = (input: {
@@ -217,14 +174,14 @@ export const resolveDocumentVipDiscount = (input: {
   lastMonthSpend: number;
   vipConfig: VipTierConfig;
   current: VipDealDocument;
-  customerDocumentsInBenefitMonth: VipDealDocument[];
+  silverDiscountRedeemed: boolean;
 }): VipDocumentDiscount => {
   const config = normalizeVipTierConfig(input.vipConfig);
   const standing = resolveVipDiscountLevel(input.lastMonthSpend, config);
   const apply = shouldApplyVipOnDocument({
     standing,
     current: input.current,
-    customerDocumentsInBenefitMonth: input.customerDocumentsInBenefitMonth,
+    silverDiscountRedeemed: input.silverDiscountRedeemed,
   });
   return computeVipDocumentDiscount({
     grandTotal: input.grandTotal,
