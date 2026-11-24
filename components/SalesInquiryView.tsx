@@ -1235,8 +1235,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         status: selectedInquiry && !isCreatingNew ? selectedInquiry.status : SalesInquiryStatus.DRAFT,
         ...(replacementSourceId ? { replacement_of_refno: replacementSourceId } : {}),
         ...toVipSavePayload(vipDiscount),
-        items: items.map(({ tempId, isManual, ...rest }) => ({
+        items: items.map(({ tempId, isManual, isNew, ...rest }) => ({
           ...rest,
+          // Keep the persisted inquiry-line ID so the API can distinguish
+          // duplicate products that have different negotiated prices.
+          ...(!isNew && /^\d+$/.test(String(tempId || '')) ? { id: String(tempId) } : {}),
           qty: rest.qty === '' ? 1 : Number(rest.qty) || 1,
           unit_price: Number(rest.unit_price) || 0,
         })),
@@ -1814,8 +1817,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return '';
   };
   const isManualItem = (item: InquiryItemRow) => Boolean(item.isManual);
-  const canEditItemUnitPrice = (item: InquiryItemRow) =>
-    !isReadOnly && (isManualItem(item) || canEditUnitPrice);
+  const canEditItemUnitPrice = (_item: InquiryItemRow) =>
+    !isReadOnly && canEditUnitPrice;
 
   const legacyInputClass = 'h-[34px] w-full rounded-[4px] border border-[#c9c9c9] bg-white px-3 text-[13px] text-[#333] outline-none focus:border-[#7a9ab5] disabled:bg-[#f2f2f2] disabled:text-[#777]';
   const legacyLabelClass = 'whitespace-nowrap text-right text-[16px] font-semibold text-[#29475f]';
