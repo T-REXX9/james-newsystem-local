@@ -36,8 +36,6 @@ export const SalesReturnPrintDocument: React.FC<{
 }> = ({ record, items }) => {
   const subtotal = items.reduce((sum, item) => sum + item.amount, 0);
   const discountedSubtotal = Math.max(0, subtotal - record.ldiscount_amt);
-  const tax = record.ltax_type.trim().toLowerCase() === 'exclusive' ? discountedSubtotal * 0.12 : 0;
-  const total = discountedSubtotal + tax;
 
   return (
     <article id="sales-return-print-document" className="sales-return-print-document">
@@ -60,7 +58,6 @@ export const SalesReturnPrintDocument: React.FC<{
           .sales-return-print-remarks th { height: 34pt; text-align: left; vertical-align: top; }
         }`}</style>
       <header className="sales-return-print-heading">
-        <div>QBP ENTERPRISES INC.</div>
         <div><u>CREDIT MEMO</u></div>
       </header>
       <section className="sales-return-print-meta">
@@ -90,11 +87,7 @@ export const SalesReturnPrintDocument: React.FC<{
               <td>{item.unit_price.toFixed(2)}</td><td>{item.amount.toFixed(2)}</td>
             </tr>
           ))}
-          {record.ltax_type.trim().toLowerCase() === 'exclusive' ? <>
-            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Total:</strong></td><td><strong>{discountedSubtotal.toFixed(2)}</strong></td></tr>
-            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Vat:</strong></td><td><strong>{tax.toFixed(2)}</strong></td></tr>
-            <tr><td colSpan={8} className="sales-return-print-total-label"><strong>Grand Total:</strong></td><td><strong>{total.toFixed(2)}</strong></td></tr>
-          </> : <tr><td colSpan={8} className="sales-return-print-total-label"><strong>TOTAL</strong></td><td><strong>{subtotal.toFixed(2)}</strong></td></tr>}
+          <tr><td colSpan={8} className="sales-return-print-total-label"><strong>TOTAL</strong></td><td><strong>{discountedSubtotal.toFixed(2)}</strong></td></tr>
         </tbody>
       </table>
       <table className="sales-return-print-remarks"><tbody><tr><th>Remarks: {record.internal_remarks || '—'}</th></tr></tbody></table>
@@ -102,8 +95,8 @@ export const SalesReturnPrintDocument: React.FC<{
   );
 };
 
-export const calculateSalesReturnPostedAmount = (subtotal: number, discount: number, taxType: string): number =>
-  Math.max(0, subtotal - discount) * (taxType.trim().toLowerCase() === 'exclusive' ? 1.12 : 1);
+export const calculateSalesReturnPostedAmount = (subtotal: number, discount: number): number =>
+  Math.max(0, subtotal - discount);
 
 const formatDate = (value?: string): string => {
   if (!value) return 'N/A';
@@ -1352,7 +1345,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
                         <td colSpan={isPending && canDelete ? 2 : 1} className="px-2 py-3 text-right">Total Qty:</td>
                         <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{items.reduce((sum, item) => sum + item.qty, 0).toFixed(2)}</span></td>
                         <td colSpan={6} className="px-2 py-3 text-right">Grand Total:</td>
-                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{peso.format(calculateSalesReturnPostedAmount(items.reduce((sum, item) => sum + item.amount, 0), selected.ldiscount_amt || 0, selected.ltax_type || 'Exclusive'))}</span></td>
+                        <td className="px-2 py-3 text-right"><span className="rounded-full bg-[#5d82a2] px-2 py-0.5 text-white">{peso.format(calculateSalesReturnPostedAmount(items.reduce((sum, item) => sum + item.amount, 0), selected.ldiscount_amt || 0))}</span></td>
                       </tr>
                     </tfoot>
                   </table>

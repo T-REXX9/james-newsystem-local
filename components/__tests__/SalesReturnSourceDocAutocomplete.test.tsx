@@ -56,12 +56,11 @@ describe('Sales Return source-document autocomplete', () => {
 });
 
 describe('Sales Return header values and posted amount', () => {
-  it('matches posting math for no discount, exhausted discount, over-discount, and exclusive tax', () => {
-    expect(calculateSalesReturnPostedAmount(100, 0, 'Exclusive')).toBeCloseTo(112);
-    expect(calculateSalesReturnPostedAmount(100, 100, 'Exclusive')).toBe(0);
-    expect(calculateSalesReturnPostedAmount(100, 125, 'Exclusive')).toBe(0);
-    expect(calculateSalesReturnPostedAmount(100, 10, 'Inclusive')).toBe(90);
-    expect(calculateSalesReturnPostedAmount(100, 10, 'None')).toBe(90);
+  it('uses VAT-inclusive returned prices and subtracts the discount once', () => {
+    expect(calculateSalesReturnPostedAmount(100, 0)).toBe(100);
+    expect(calculateSalesReturnPostedAmount(100, 100)).toBe(0);
+    expect(calculateSalesReturnPostedAmount(100, 125)).toBe(0);
+    expect(calculateSalesReturnPostedAmount(100, 10)).toBe(90);
   });
 
   it('maps saved header fields and sends editable values through the update request', async () => {
