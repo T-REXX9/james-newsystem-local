@@ -7,10 +7,13 @@ import {
   AutomaticBackupSettings,
   BackupDestination,
   CorporateDumpImportReport,
+  FreightChargesRestoreReport,
+  downloadFreightChargesBackup,
   downloadFullDatabaseBackup,
   fetchBackupDestinations,
   fetchServerMaintenanceStatus,
   importCorporateDumpFile,
+  restoreFreightChargesDumpFile,
   saveAutomaticBackupSettings,
   ServerMaintenanceStatus,
 } from '../services/serverMaintenanceService';
@@ -66,6 +69,10 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [freightBusy, setFreightBusy] = useState(false);
+  const [freightProgress, setFreightProgress] = useState('');
+  const [freightReport, setFreightReport] = useState<FreightChargesRestoreReport | null>(null);
+  const [freightDumpName, setFreightDumpName] = useState('');
   const [importProgress, setImportProgress] = useState('');
   const [importReport, setImportReport] = useState<CorporateDumpImportReport | null>(null);
   const [selectedDumpName, setSelectedDumpName] = useState('');
@@ -131,6 +138,43 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
     }
   };
 
+  const handleFreightDumpDownload = async () => {
+    setFreightBusy(true);
+    try {
+      const result = await downloadFreightChargesBackup();
+      addToast({ type: 'success', message: `Downloaded ${result.filename} (${formatBytes(result.bytes)}).` });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to download Freight Charges dump.' });
+    } finally {
+      setFreightBusy(false);
+    }
+  };
+
+  const handleFreightDumpRestore = async (file: File, input: HTMLInputElement) => {
+    setFreightBusy(true);
+    setFreightProgress('Preparing upload…');
+    setFreightDumpName(file.name);
+    setFreightReport(null);
+    try {
+      const report = await restoreFreightChargesDumpFile(file, ({ uploadedBytes, totalBytes, phase }) => {
+        setFreightProgress(phase === 'upload'
+          ? `Uploading dump… ${totalBytes ? Math.round((uploadedBytes / totalBytes) * 100) : 0}%`
+          : 'Restoring missing Freight Charges rows…');
+      });
+      setFreightReport(report);
+      const inserted = report.restore.headers_inserted + report.restore.items_inserted;
+      addToast({ type: 'success', message: `Restored ${inserted} missing Freight Charges rows from ${report.filename}.` });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) return;
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'Unable to restore Freight Charges dump.' });
+    } finally {
+      setFreightBusy(false);
+      setFreightProgress('');
+      input.value = '';
+    }
+  };
+
   const toggleWeekday = (day: number) => {
     setDraft((prev) => {
       const exists = prev.weekly_days.includes(day);
@@ -188,7 +232,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
           <button
             type="button"
             onClick={() => void loadAll()}
-            disabled={loading || downloading || saving || importing}
+            disabled={loading || downloading || saving || importing || freightBusy}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200"
           >
             <RefreshCw className={loading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'} /> Refresh
@@ -255,6 +299,56 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-slate-900 dark:text-white">
+                <DatabaseBackup className="h-5 w-5 text-blue-700" />
+                <h2 className="text-lg font-bold">Freight Charges backup and restore</h2>
+              </div>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                Download this file from the source server, then restore it on the destination. It includes Freight Charges records and item rows; restore adds missing rows with new internal IDs and leaves existing rows and customer ledger entries untouched.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleFreightDumpDownload()}
+              disabled={freightBusy || loading}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className={freightBusy ? 'h-4 w-4 animate-pulse' : 'h-4 w-4'} />
+              Download Freight Charges dump
+            </button>
+          </div>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+              <input
+                type="file"
+                accept=".jsonl.gz,application/gzip"
+                className="sr-only"
+                disabled={freightBusy || loading}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void handleFreightDumpRestore(file, event.currentTarget);
+                }}
+              />
+              <FileUp className="h-4 w-4" />
+              Choose Freight Charges dump to restore…
+            </label>
+            {freightDumpName ? <p className="break-all text-sm font-semibold text-slate-700 dark:text-slate-200">{freightDumpName}</p> : null}
+          </div>
+          {freightBusy ? <p className="mt-4 text-sm text-slate-500" role="status">{freightProgress || 'Freight Charges operation in progress… Keep this tab open.'}</p> : null}
+          {freightReport ? (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              <p className="font-bold">Restore report: {freightReport.filename} ({formatBytes(freightReport.bytes)})</p>
+              <p className="mt-1">Added {freightReport.restore.headers_inserted} records and {freightReport.restore.items_inserted} item rows. Internal row IDs were regenerated.</p>
+              <p className="mt-1">Already present: {freightReport.restore.headers_already_present} records, {freightReport.restore.items_already_present} item rows. Conflicts: {freightReport.restore.headers_conflicted} records and {freightReport.restore.items_skipped_conflict} related item rows.</p>
+              {freightReport.restore.items_without_parent > 0 ? <p className="mt-1">Orphan item rows without a matching Freight Charges record were restored: {freightReport.restore.items_without_parent}.</p> : null}
+              {freightReport.restore.duplicate_source_headers > 0 ? <p className="mt-1">Duplicate source record references skipped: {freightReport.restore.duplicate_source_headers}.</p> : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white">
             <FileUp className="h-5 w-5 text-blue-700" />
             <h2 className="text-lg font-bold">Import corporate dump</h2>
@@ -269,7 +363,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
               type="checkbox"
               checked={overwriteProductPrices}
               onChange={(event) => setOverwriteProductPrices(event.target.checked)}
-              disabled={importing || loading}
+              disabled={importing || loading || freightBusy}
               className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-700"
             />
             <span>Overwrite existing product prices from the dump</span>
@@ -281,7 +375,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                 type="file"
                 accept=".sql,.gz,application/sql,application/gzip"
                 className="sr-only"
-                disabled={importing || loading}
+                disabled={importing || loading || freightBusy}
                 onChange={(event) => {
                   const file = event.target.files?.[0] || null;
                   setSelectedDumpName(file?.name || '');

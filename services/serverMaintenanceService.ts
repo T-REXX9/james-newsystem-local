@@ -10,6 +10,8 @@ export type CorporateDumpImportInfo = {
   safety: string;
 };
 
+export type FreightChargesBackupInfo = CorporateDumpImportInfo & { supported_extension: string };
+
 export type ServerMaintenanceStatus = {
   database_name: string;
   backup_available: boolean;
@@ -17,6 +19,7 @@ export type ServerMaintenanceStatus = {
   description: string;
   automatic_backup?: AutomaticBackupSettings;
   corporate_dump_import?: CorporateDumpImportInfo;
+  freight_charges_backup?: FreightChargesBackupInfo;
 };
 
 export type AutomaticBackupFrequency = 'daily' | 'weekly';
@@ -52,6 +55,22 @@ export type CorporateDumpImportReport = {
     tables_skipped_no_shared_columns: string[];
     affected_rows: number;
     details: string[];
+  };
+};
+
+export type FreightChargesRestoreReport = {
+  filename: string;
+  bytes: number;
+  restore: {
+    headers_inserted: number;
+    headers_already_present: number;
+    headers_conflicted: number;
+    duplicate_source_headers: number;
+    items_inserted: number;
+    items_already_present: number;
+    items_without_parent: number;
+    items_skipped_conflict: number;
+    row_ids_regenerated: boolean;
   };
 };
 
@@ -247,6 +266,83 @@ export async function downloadFullDatabaseBackup(): Promise<{ filename: string; 
   }
 
   return { filename, bytes: blob.size };
+}
+
+export async function downloadFreightChargesBackup(): Promise<{ filename: string; bytes: number }> {
+  const response = await fetch(`${API_BASE_URL}/server-maintenance/freight-charges-backup`, {
+    method: 'GET',
+    headers: { Accept: 'application/gzip, application/json', ...authHeaders() },
+  });
+  const contentType = String(response.headers.get('Content-Type') || '').toLowerCase();
+  if (!response.ok || contentType.includes('application/json')) await throwApiError(response);
+  const blob = await response.blob();
+  if (!blob.size) throw new Error('Freight Charges backup download was empty');
+  const filename = filenameFromDisposition(response.headers.get('Content-Disposition')) || 'freight_charges.jsonl.gz';
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.rel = 'noopener';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+  return { filename, bytes: blob.size };
+}
+
+export async function restoreFreightChargesDumpFile(
+  file: File,
+  onProgress?: (progress: { uploadedBytes: number; totalBytes: number; phase: 'upload' | 'restore' }) => void
+): Promise<FreightChargesRestoreReport> {
+  if (!file.size) throw new Error('Selected Freight Charges dump is empty');
+  if (!/\.jsonl\.gz$/i.test(file.name)) throw new Error('Only .jsonl.gz Freight Charges dumps are supported');
+  const totalBytes = file.size;
+  const base = `${API_BASE_URL}/server-maintenance/freight-charges-backup/uploads`;
+  const createResponse = await fetch(base, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ filename: file.name, bytes: totalBytes }),
+  });
+  const session = await unwrapData<{ upload_id: string }>(createResponse);
+  try {
+    const chunkSize = 1024 * 1024;
+    let uploadedBytes = 0;
+    onProgress?.({ uploadedBytes, totalBytes, phase: 'upload' });
+    while (uploadedBytes < totalBytes) {
+      const buffer = await file.slice(uploadedBytes, uploadedBytes + chunkSize).arrayBuffer();
+      const response = await fetch(`${base}/${encodeURIComponent(session.upload_id)}/chunks`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream', ...authHeaders() },
+        body: buffer,
+      });
+      const progress = await unwrapData<{ bytes_received: number; bytes_expected: number; complete: boolean }>(response);
+      if (progress.bytes_received <= uploadedBytes || progress.bytes_received > totalBytes) {
+        throw new Error('Freight Charges dump upload returned invalid progress');
+      }
+      uploadedBytes = progress.bytes_received;
+      onProgress?.({ uploadedBytes, totalBytes, phase: 'upload' });
+    }
+    onProgress?.({ uploadedBytes: totalBytes, totalBytes, phase: 'restore' });
+    const restoreResponse = await fetch(`${base}/${encodeURIComponent(session.upload_id)}/restore`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({}),
+    });
+    return await unwrapData<FreightChargesRestoreReport>(restoreResponse);
+  } catch (error) {
+    try {
+      await fetch(`${base}/${encodeURIComponent(session.upload_id)}`, {
+        method: 'DELETE',
+        headers: { Accept: 'application/json', ...authHeaders() },
+      });
+    } catch {
+      // Preserve the restore error; the upload can be cleaned up server-side later.
+    }
+    throw error;
+  }
 }
 
 export async function importCorporateDumpFile(

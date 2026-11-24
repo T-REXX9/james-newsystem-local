@@ -9,6 +9,8 @@ const downloadBackup = vi.fn();
 const fetchDestinations = vi.fn();
 const saveAutomaticBackup = vi.fn();
 const importCorporateDump = vi.fn();
+const downloadFreightBackup = vi.fn();
+const restoreFreightDump = vi.fn();
 const addToast = vi.fn();
 
 vi.mock('../../services/serverMaintenanceService', () => ({
@@ -17,6 +19,8 @@ vi.mock('../../services/serverMaintenanceService', () => ({
   fetchBackupDestinations: (...args: unknown[]) => fetchDestinations(...args),
   saveAutomaticBackupSettings: (...args: unknown[]) => saveAutomaticBackup(...args),
   importCorporateDumpFile: (...args: unknown[]) => importCorporateDump(...args),
+  downloadFreightChargesBackup: (...args: unknown[]) => downloadFreightBackup(...args),
+  restoreFreightChargesDumpFile: (...args: unknown[]) => restoreFreightDump(...args),
 }));
 
 vi.mock('../ToastProvider', () => ({
@@ -30,6 +34,8 @@ describe('ServerMaintenanceView', () => {
     fetchDestinations.mockReset();
     saveAutomaticBackup.mockReset();
     importCorporateDump.mockReset();
+    downloadFreightBackup.mockReset();
+    restoreFreightDump.mockReset();
     addToast.mockReset();
     fetchStatus.mockResolvedValue({
       database_name: 'topnotch_migrate',
@@ -85,6 +91,44 @@ describe('ServerMaintenanceView', () => {
       expect(downloadBackup).toHaveBeenCalled();
       expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
     });
+  });
+
+  it('lets the Master User download a Freight Charges dump', async () => {
+    const user = userEvent.setup();
+    downloadFreightBackup.mockResolvedValue({ filename: 'freight_charges.jsonl.gz', bytes: 2048 });
+    render(<ServerMaintenanceView currentUser={{ id: '1', email: 'owner@example.com', role: 'Master User', user_type: '1' } as any} />);
+    await user.click(await screen.findByRole('button', { name: 'Download Freight Charges dump' }));
+    await waitFor(() => {
+      expect(downloadFreightBackup).toHaveBeenCalled();
+      expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+    });
+  });
+
+  it('restores a Freight Charges dump and shows inserted row counts', async () => {
+    const user = userEvent.setup();
+    restoreFreightDump.mockResolvedValue({
+      filename: 'freight.jsonl.gz',
+      bytes: 1024,
+      restore: {
+        headers_inserted: 3,
+        headers_already_present: 2,
+        headers_conflicted: 1,
+        duplicate_source_headers: 0,
+        items_inserted: 4,
+        items_already_present: 5,
+        items_without_parent: 0,
+        items_skipped_conflict: 0,
+        row_ids_regenerated: true,
+      },
+    });
+    render(<ServerMaintenanceView currentUser={{ id: '1', email: 'owner@example.com', role: 'Master User', user_type: '1' } as any} />);
+    expect(await screen.findByRole('heading', { name: 'Freight Charges backup and restore' })).toBeInTheDocument();
+    const input = document.querySelector('input[accept=".jsonl.gz,application/gzip"]') as HTMLInputElement;
+    const file = new File(['dump'], 'freight.jsonl.gz', { type: 'application/gzip' });
+    await user.upload(input, file);
+    await waitFor(() => expect(restoreFreightDump).toHaveBeenCalledWith(file, expect.any(Function)));
+    expect(await screen.findByText(/Added 3 records and 4 item rows/)).toBeInTheDocument();
+    expect(await screen.findByText(/Conflicts: 1 records/)).toBeInTheDocument();
   });
 
   it('blocks enabling Automatic Backup without a Backup Destination', async () => {
@@ -163,7 +207,7 @@ describe('ServerMaintenanceView', () => {
     expect(overwritePrices).not.toBeChecked();
     await user.click(overwritePrices);
 
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = document.querySelector('input[accept=".sql,.gz,application/sql,application/gzip"]') as HTMLInputElement;
     expect(fileInput).toBeTruthy();
     const file = new File(['dump'], 'corp.sql.gz', { type: 'application/gzip' });
     await user.upload(fileInput, file);
