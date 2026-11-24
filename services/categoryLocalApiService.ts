@@ -37,7 +37,11 @@ export const fetchCategories = async (search = ''): Promise<CategoryListResponse
         page: '1',
         per_page: '500',
     });
-    const payload = await requestJson(`${API_BASE_URL}/categories?${query.toString()}`);
+    // Category names are edited in Category Management and immediately reused by
+    // product forms, so a cached GET can leave the dropdown showing stale options.
+    const payload = await requestJson(`${API_BASE_URL}/categories?${query.toString()}`, {
+        cache: 'no-store',
+    });
     return payload?.data || { items: [], meta: { page: 1, per_page: 500, total: 0, total_pages: 0 } };
 };
 
