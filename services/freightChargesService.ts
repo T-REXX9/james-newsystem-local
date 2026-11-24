@@ -120,6 +120,8 @@ const getContext = () => {
 export const freightChargesService = {
   async list(params?: {
     search?: string;
+    dmNo?: string;
+    signal?: AbortSignal;
     status?: string;
     customerId?: string;
     month?: string;
@@ -137,10 +139,13 @@ export const freightChargesService = {
     });
 
     if (params?.search) query.set('search', params.search);
+    if (params?.dmNo) query.set('dm_no', params.dmNo);
     if (params?.customerId) query.set('customer_id', params.customerId);
     if (params?.status && params.status !== 'All') query.set('status', params.status);
 
-    const data = await requestApi(`${API_BASE_URL}/freight-charges?${query.toString()}`);
+    const data = await requestApi(`${API_BASE_URL}/freight-charges?${query.toString()}`, {
+      signal: params?.signal,
+    });
     return {
       items: Array.isArray(data?.items) ? data.items.map(mapEntry) : [],
       meta: {

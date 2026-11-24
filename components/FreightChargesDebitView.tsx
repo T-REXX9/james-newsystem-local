@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   freightChargesService,
   FreightCharge,
@@ -12,6 +12,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { canBackdatePosting, canPerformAction } from '../utils/actionPermissions';
 import { canMutateDocumentDateField, localTodayYmd, validateDocumentDateWrite } from '../utils/backdatedPosting';
 import CustomerAutocomplete from './CustomerAutocomplete';
+import SearchableSelect, { SearchableSelectOption } from './SearchableSelect';
 import { formatAccountingTimestamp, formatDate } from '../utils/formatUtils';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
@@ -190,6 +191,14 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [refSearchInput, setRefSearchInput] = useState('');
+  const debouncedRefSearch = useDebounce(refSearchInput, 250);
+  const [refSearchResults, setRefSearchResults] = useState<FreightCharge[]>([]);
+  const [selectedRefSuggestion, setSelectedRefSuggestion] = useState<FreightCharge | null>(null);
+  const [loadingRefSearch, setLoadingRefSearch] = useState(false);
+  const [refSearchError, setRefSearchError] = useState('');
+  const refSearchRequestRef = useRef(0);
+  const refSearchAbortRef = useRef<AbortController | null>(null);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchDraft, setSearchDraft] = useState({
     dmNo: '',
@@ -231,6 +240,24 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
   const canUnpost = canPerformAction('can_unpost');
   const hasBackdatedPosting = canBackdatePosting();
   const dateMax = localTodayYmd();
+
+  const refSearchOptions = useMemo<SearchableSelectOption[]>(() => refSearchResults.map((item) => ({
+    value: item.ldm_no || item.lrefno,
+    label: `${item.ldm_no || item.lrefno} · ${item.lcustomer_lname || 'Unknown customer'}`,
+    keywords: [item.lrefno, item.ltrackingno, item.linvoice_no].filter(Boolean),
+  })), [refSearchResults]);
+
+  const handleRefSearchInput = useCallback((query: string) => {
+    refSearchRequestRef.current += 1;
+    refSearchAbortRef.current?.abort();
+    refSearchAbortRef.current = null;
+    setRefSearchInput(query);
+    setSearchDraft((previous) => ({ ...previous, dmNo: query }));
+    setSelectedRefSuggestion(null);
+    setRefSearchResults([]);
+    setRefSearchError('');
+    setLoadingRefSearch(query.trim().length >= 2);
+  }, []);
 
   const fetchList = async () => {
     setLoadingList(true);
@@ -361,6 +388,54 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    const query = debouncedRefSearch.trim();
+    if (query.length < 2) {
+      refSearchRequestRef.current += 1;
+      refSearchAbortRef.current?.abort();
+      refSearchAbortRef.current = null;
+      setRefSearchResults([]);
+      setLoadingRefSearch(false);
+      return undefined;
+    }
+
+    const requestId = ++refSearchRequestRef.current;
+    const controller = new AbortController();
+    refSearchAbortRef.current = controller;
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 10000);
+    setLoadingRefSearch(true);
+    freightChargesService.list({
+      dmNo: query,
+      status: 'All',
+      month: '',
+      year: '',
+      page: 1,
+      perPage: 10,
+      signal: controller.signal,
+    }).then((data) => {
+      if (refSearchRequestRef.current === requestId) setRefSearchResults(data.items);
+    }).catch(() => {
+      if (refSearchRequestRef.current === requestId) {
+        setRefSearchResults([]);
+        if (timedOut) setRefSearchError('Search timed out. Please try again.');
+      }
+    }).finally(() => {
+      window.clearTimeout(timeoutId);
+      if (refSearchRequestRef.current === requestId) setLoadingRefSearch(false);
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (refSearchRequestRef.current === requestId) refSearchRequestRef.current += 1;
+      if (refSearchAbortRef.current === controller) refSearchAbortRef.current = null;
+      controller.abort();
+    };
+  }, [debouncedRefSearch]);
 
   useEffect(() => {
     fetchList();
@@ -599,6 +674,19 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
   };
 
   const applySearchModal = () => {
+    const selectedDmNo = selectedRefSuggestion?.ldm_no || selectedRefSuggestion?.lrefno || '';
+    if (selectedRefSuggestion && selectedDmNo === searchDraft.dmNo.trim()) {
+      setIsCreating(false);
+      setSelectedRefno(selectedRefSuggestion.lrefno);
+      setSearchInput(selectedDmNo);
+      setSearch(selectedDmNo);
+      setStatusFilter('All');
+      setPage(1);
+      setShowSearchModal(false);
+      setError('');
+      return;
+    }
+
     const nextSearch = [searchDraft.dmNo, searchDraft.customer, searchDraft.trackingNo]
       .map((value) => value.trim())
       .filter(Boolean)
@@ -610,7 +698,15 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
   };
 
   const clearFilters = () => {
+    refSearchRequestRef.current += 1;
+    refSearchAbortRef.current?.abort();
+    refSearchAbortRef.current = null;
     setSearchDraft({ dmNo: '', customer: '', trackingNo: '' });
+    setSelectedRefSuggestion(null);
+    setRefSearchInput('');
+    setRefSearchResults([]);
+    setRefSearchError('');
+    setLoadingRefSearch(false);
     setSearchInput('');
     setSearch('');
     setStatusFilter('All');
@@ -856,10 +952,29 @@ const FreightChargesDebitView: React.FC<{ initialFreightRefNo?: string; initialC
               <button type="button" onClick={() => setShowSearchModal(false)} className="text-[21px] font-bold leading-none text-black/30 hover:text-black/60">&times;</button>
             </div>
             <div className="space-y-5 px-[15px] py-[15px]">
-              <label className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
+              <div className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
                 <span className="text-right font-semibold pr-[15px]">Ref No.</span>
-                <input value={searchDraft.dmNo} onChange={(event) => setSearchDraft((prev) => ({ ...prev, dmNo: event.target.value }))} placeholder="Input DM No." className={fieldClass} />
-              </label>
+                <SearchableSelect
+                  value={searchDraft.dmNo}
+                  options={refSearchOptions}
+                  onChange={(dmNo) => {
+                    const match = refSearchResults.find((item) => (item.ldm_no || item.lrefno) === dmNo) || null;
+                    setSelectedRefSuggestion(match);
+                    setSearchDraft((previous) => ({ ...previous, dmNo }));
+                    setRefSearchInput(dmNo);
+                  }}
+                  inputOnly
+                  inputOnlyDropdown
+                  inputValue={refSearchInput}
+                  onInputChange={handleRefSearchInput}
+                  loading={loadingRefSearch}
+                  emptyMessage={refSearchError || undefined}
+                  searchPlaceholder="Type a DM reference number..."
+                  inputAriaLabel="Ref No."
+                  className="w-full"
+                  searchInputClassName="rounded-[3px] border-[#ccc] text-[13px] focus:border-[#66afe9] focus:ring-[#66afe9]/30"
+                />
+              </div>
               <div className="grid grid-cols-[25%_58.333%] items-center text-[13px]">
                 <span className="text-right font-semibold pr-[15px]">Customer</span>
                 <CustomerAutocomplete

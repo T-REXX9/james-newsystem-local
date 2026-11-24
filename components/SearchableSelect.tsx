@@ -22,6 +22,8 @@ interface SearchableSelectProps {
     searchInputClassName?: string;
     dropdownClassName?: string;
     inputOnly?: boolean;
+    inputOnlyDropdown?: boolean;
+    emptyMessage?: string;
     inputValue?: string;
     onInputChange?: (value: string) => void;
     onInputKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
@@ -43,6 +45,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     searchInputClassName = '',
     dropdownClassName = '',
     inputOnly = false,
+    inputOnlyDropdown = false,
+    emptyMessage,
     inputValue = '',
     onInputChange,
     onInputKeyDown,
@@ -64,7 +68,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     );
 
     const filteredOptions = useMemo(() => {
-        const trimmedQuery = query.trim().toLowerCase();
+        const trimmedQuery = (inputOnlyDropdown ? inputValue : query).trim().toLowerCase();
         if (!trimmedQuery) {
             return options;
         }
@@ -75,12 +79,13 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 .toLowerCase();
             return haystack.includes(trimmedQuery);
         });
-    }, [options, query]);
+    }, [inputOnlyDropdown, inputValue, options, query]);
 
     const updatePosition = useCallback(() => {
-        if (!buttonRef.current || !isOpen) return;
+        const anchor = inputOnly ? inputRef.current : buttonRef.current;
+        if (!anchor || !isOpen) return;
 
-        const rect = buttonRef.current.getBoundingClientRect();
+        const rect = anchor.getBoundingClientRect();
         const availableBelow = Math.max(window.innerHeight - rect.bottom - 12, 180);
         const dropdownMaxHeight = Math.min(320, availableBelow);
         setDropdownStyle({
@@ -91,8 +96,8 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             maxHeight: `${dropdownMaxHeight}px`,
             zIndex: 9999,
         });
-        setOptionsMaxHeight(Math.max(120, dropdownMaxHeight - 57));
-    }, [isOpen]);
+        setOptionsMaxHeight(Math.max(120, dropdownMaxHeight - (inputOnlyDropdown ? 12 : 57)));
+    }, [inputOnly, inputOnlyDropdown, isOpen]);
 
     useEffect(() => {
         if (!isOpen) return undefined;
@@ -143,7 +148,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
     }, [isOpen, onSearch, selectId]);
 
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || inputOnlyDropdown) return;
 
         const frame = window.requestAnimationFrame(() => {
             inputRef.current?.focus();
@@ -151,7 +156,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
         });
 
         return () => window.cancelAnimationFrame(frame);
-    }, [isOpen]);
+    }, [inputOnlyDropdown, isOpen]);
 
     const handleSelect = (nextValue: string) => {
         onChange(nextValue);
@@ -166,10 +171,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} aria-hidden="true" />
                     <input
+                        ref={inputOnlyDropdown ? inputRef : undefined}
                         type="search"
                         value={inputValue}
-                        onChange={(event) => onInputChange?.(event.target.value)}
+                        onFocus={() => {
+                            if (inputOnlyDropdown && !disabled) setIsOpen(true);
+                        }}
+                        onChange={(event) => {
+                            onInputChange?.(event.target.value);
+                            if (inputOnlyDropdown) setIsOpen(true);
+                        }}
                         onKeyDown={onInputKeyDown}
+                        aria-expanded={inputOnlyDropdown ? isOpen : undefined}
+                        aria-controls={inputOnlyDropdown ? `${selectId}-dropdown` : undefined}
+                        aria-autocomplete={inputOnlyDropdown ? 'list' : undefined}
                         placeholder={searchPlaceholder}
                         aria-label={inputAriaLabel || searchPlaceholder}
                         disabled={disabled}
@@ -201,14 +216,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
             </button>
             )}
 
-            {!inputOnly && isOpen &&
+            {isOpen && (!inputOnly || inputOnlyDropdown) &&
                 ReactDOM.createPortal(
                     <div
                         id={`${selectId}-dropdown`}
                         style={dropdownStyle}
                         className={`overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800 ${dropdownClassName}`}
                     >
-                        <div className="border-b border-gray-200 p-2 dark:border-gray-700">
+                        {!inputOnlyDropdown && <div className="border-b border-gray-200 p-2 dark:border-gray-700">
                             <div className="relative">
                                 <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                                 <input
@@ -224,12 +239,14 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
                                     className={`w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 ${searchInputClassName}`}
                                 />
                             </div>
-                        </div>
+                        </div>}
                         <div className="overflow-y-auto py-1" style={{ maxHeight: `${optionsMaxHeight}px` }}>
                             {loading ? (
                                 <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400" role="status">Searching...</div>
                             ) : filteredOptions.length === 0 ? (
-                                <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">No matches found</div>
+                                <div className="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
+                                    {inputOnlyDropdown && !inputValue.trim() ? 'Type a reference number to search' : emptyMessage || 'No matches found'}
+                                </div>
                             ) : (
                                 filteredOptions.map((option) => {
                                     const isSelected = option.value === value;
