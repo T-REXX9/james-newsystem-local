@@ -60,6 +60,9 @@ const deletionCustomerName = (log: ActivityLogRecord): string => {
 };
 
 const deletionAuditId = (log: ActivityLogRecord): number | null => {
+  if (Number.isSafeInteger(log.deletion_audit_id) && log.deletion_audit_id > 0) {
+    return log.deletion_audit_id;
+  }
   const match = /^call-report-deletion-audit:(\d+)$/.exec(log.lrefno || '');
   return match ? Number(match[1]) : null;
 };
@@ -251,6 +254,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
             <option value="Update">Update</option>
             <option value="Post">Post</option>
             <option value="Unpost">Unpost</option>
+            <option value="Delete">Delete</option>
             <option value="Verify Prospect">Verify Prospect</option>
             <option value="Reject Prospect - Blacklisted">Reject Prospect - Blacklisted</option>
           </select>
@@ -292,7 +296,7 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
                 <th className="px-6 py-3 font-medium">User</th>
                 <th className="px-6 py-3 font-medium">Page</th>
                 <th className="px-6 py-3 font-medium">Action</th>
-                <th className="px-6 py-3 font-medium">Ref No</th>
+                <th className="px-6 py-3 font-medium">Record No.</th>
                 <th className="px-6 py-3 font-medium">Details</th>
                 <th className="px-6 py-3 font-medium">Result</th>
               </tr>
@@ -331,8 +335,8 @@ export default function ActivityLogs({ title = 'Activity Logs', initialDateFrom,
                           {log.laction || '-'}
                         </span>
                       </td>
-                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate" title={log.lrefno || ''}>
-                        {log.lrefno || '-'}
+                      <td className="px-6 py-3 text-gray-500 dark:text-gray-400 font-mono text-xs max-w-xs truncate" title={log.display_refno || ''}>
+                        {log.display_refno || '-'}
                       </td>
                       <td className="px-6 py-3 text-gray-500 dark:text-gray-400 max-w-xs">
                         {auditId !== null ? (

@@ -11,6 +11,7 @@ export type ActivityLogRecord = {
   lpage: string;
   laction: string;
   lrefno: string;
+  display_refno: string;
   lreason: string;
   lold_status: string;
   lnew_status: string;
@@ -82,6 +83,9 @@ const mapRecord = (row: any): ActivityLogRecord => ({
   lpage: String(row?.lpage || ''),
   laction: String(row?.laction || ''),
   lrefno: String(row?.lrefno || ''),
+  // The API owns reference resolution. Never fall back to the internal
+  // database key when talking to an older or partially updated server.
+  display_refno: String(row?.display_refno ?? '-'),
   lreason: String(row?.lreason || ''),
   lold_status: String(row?.lold_status || ''),
   lnew_status: String(row?.lnew_status || ''),
