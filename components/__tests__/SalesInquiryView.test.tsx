@@ -1362,6 +1362,55 @@ describe('SalesInquiryView', () => {
     expect(screen.queryByText('TOTAL to pay :')).not.toBeInTheDocument();
   });
 
+  it('manually rechecks VIP redemption and updates the inquiry discount preview', async () => {
+    const user = userEvent.setup();
+    const inquiry = makeInquiry({
+      id: 'inq-manual-vip-recheck',
+      inquiry_no: 'INQ26-20482',
+      contact_id: 'c-1',
+      sales_date: '2026-09-30',
+      grand_total: 1000,
+      items: [{
+        id: 'item-manual-vip-recheck',
+        inquiry_id: 'inq-manual-vip-recheck',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 1000,
+        amount: 1000,
+        remark: '',
+        approval_status: 'approved',
+      }],
+    });
+    getLedgerMock
+      .mockResolvedValueOnce({
+        metrics: { last_month_sales: 15000, vip_silver_discount_redeemed_months: [] },
+        summary_rows: [],
+      })
+      .mockResolvedValueOnce({
+        metrics: { last_month_sales: 15000, vip_silver_discount_redeemed_months: ['2026-09'] },
+        summary_rows: [],
+      });
+    getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
+    getSalesInquiryMock.mockResolvedValue(inquiry);
+
+    render(<SalesInquiryView initialInquiryId={inquiry.id} today={new Date('2026-09-30T00:00:00')} />);
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('10% VIP SILVER = 100.00')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Recheck VIP Discount' }));
+
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText('10% VIP SILVER = 100.00')).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Recheck VIP Discount' })).toBeEnabled();
+    expect(screen.queryByText('TOTAL to pay :')).not.toBeInTheDocument();
+  });
+
   it('shows VIP Gold discount and TOTAL to pay on a new qualifying inquiry', async () => {
     const user = userEvent.setup();
     getLedgerMock.mockResolvedValue({

@@ -344,6 +344,8 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     vipSilverDiscountRedeemedMonths: [],
     summaryRows: [],
   });
+  const [vipRechecking, setVipRechecking] = useState(false);
+  const selectedCustomerIdRef = useRef<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [submitCount, setSubmitCount] = useState(0);
   const [submitError, setSubmitError] = useState('');
@@ -404,6 +406,10 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   }, []);
 
   useEffect(() => {
+    selectedCustomerIdRef.current = selectedCustomer?.id || null;
+  }, [selectedCustomer?.id]);
+
+  useEffect(() => {
     const customerId = selectedCustomer?.id;
     if (!customerId) {
       setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, vipSilverDiscountRedeemedMonths: [], summaryRows: [] });
@@ -438,6 +444,44 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       cancelled = true;
     };
   }, [selectedCustomer?.id, selectedInquiry?.id]);
+
+  const handleRecheckVipDiscount = async () => {
+    const customerId = selectedCustomer?.id;
+    if (!customerId || vipRechecking) return;
+
+    setVipRechecking(true);
+    try {
+      const ledger = await customerLedgerService.getLedger(customerId, { reportType: 'summary', dateType: 'all' });
+      if (selectedCustomerIdRef.current !== customerId) return;
+
+      setPostedSales({
+        ishinomotoSales: ledger.metrics.ishinomoto_sales,
+        currentMonthSales: ledger.metrics.monthly_sales,
+        lastMonthSales: ledger.metrics.last_month_sales,
+        vipSilverDiscountRedeemedMonths: ledger.metrics.vip_silver_discount_redeemed_months || [],
+        summaryRows: (ledger.summary_rows || []).map((row) => ({
+          year: Number(row.year || 0),
+          month: Number(row.month || 0),
+          debit: Number(row.debit || 0),
+        })),
+      });
+      addToast({
+        type: 'success',
+        title: 'VIP discount rechecked',
+        description: 'Latest posted sales and VIP redemption status loaded.',
+      });
+    } catch (error) {
+      if (selectedCustomerIdRef.current === customerId) {
+        addToast({
+          type: 'error',
+          title: 'Unable to recheck VIP discount',
+          description: error instanceof Error ? error.message : 'Please try again.',
+        });
+      }
+    } finally {
+      setVipRechecking(false);
+    }
+  };
 
   // Items Table
   const [items, setItems] = useState<InquiryItemRow[]>([]);
@@ -1954,6 +1998,18 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   </tr>
                 </tbody>
               </table>
+              {selectedCustomer?.id && <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void handleRecheckVipDiscount()}
+                  disabled={vipRechecking}
+                  aria-busy={vipRechecking}
+                  data-jpeg-export-ignore
+                  className="inline-flex min-h-[34px] items-center rounded-[4px] bg-[#5d82a2] px-3 text-[12px] font-semibold text-white hover:bg-[#50738f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#315574] disabled:cursor-wait disabled:opacity-60"
+                >
+                  {vipRechecking ? 'Rechecking VIP Discount…' : 'Recheck VIP Discount'}
+                </button>
+              </div>}
             </div>
 
             {exceedsCreditLimit && <div className="mb-3 text-center text-[12px] text-[#b06b00]">Balance exceeds credit limit. The old system treats this as informational only, so inquiry creation can still proceed.</div>}
