@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmSalesInquiry, convertToOrder, getSalesInquiry, replaceSalesInquiry } from '../salesInquiryLocalApiService';
+import { confirmSalesInquiry, convertToOrder, getSalesInquiry, replaceSalesInquiry, recheckSalesInquiryVipDiscount } from '../salesInquiryLocalApiService';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -38,6 +38,24 @@ describe('salesInquiryLocalApiService', () => {
     await expect(getSalesInquiry('INQ-1')).resolves.toEqual(expect.objectContaining({
       created_at: '2026-09-25 09:31:00',
     }));
+  });
+
+  it('rechecks VIP eligibility in place and returns the same inquiry number and items', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ ok: true, data: {
+      inquiry_refno: 'ref-21316', inquiry_no: 'INQ26-21316', contact_id: 'C1', sales_date: '2026-11-25',
+      sales_time: '13:31:20', status: 'Pending', grand_total: 2880, vip_applied: 0, vip_tier: 'silver',
+      vip_percentage: 10, vip_discount_amount: 0, items: [{ id: 'item-1', item_id: 'P1', qty: 2, unit_price: 1440, amount: 2880 }],
+    } })));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(recheckSalesInquiryVipDiscount('ref-21316')).resolves.toMatchObject({
+      id: 'ref-21316',
+      inquiry_no: 'INQ26-21316',
+      vip_applied: false,
+      items: [{ id: 'item-1', amount: 2880 }],
+    });
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/sales-inquiries/ref-21316/actions/recheck-vip-discount');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
   });
 
   it('keeps the customer agent and inquiry creator as separate values', async () => {

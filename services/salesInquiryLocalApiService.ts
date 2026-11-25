@@ -225,6 +225,19 @@ export const getSalesInquiry = async (id: string): Promise<SalesInquiry | null> 
   }
 };
 
+export const recheckSalesInquiryVipDiscount = async (id: string): Promise<SalesInquiry> => {
+  const context = getUserContext();
+  const updated = await requestApi(
+    `${API_BASE_URL}/sales-inquiries/${encodeURIComponent(id)}/actions/recheck-vip-discount`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main_id: context.mainId, user_id: context.userId }),
+    }
+  );
+  return mapApiInquiry(updated);
+};
+
 export const getAllSalesInquiries = async (): Promise<SalesInquiry[]> => {
   const list = await requestApi(
     `${API_BASE_URL}/sales-inquiries?main_id=${encodeURIComponent(String(API_MAIN_ID))}&status=all&page=1&per_page=200`

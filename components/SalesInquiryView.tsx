@@ -38,6 +38,7 @@ import {
   getAllSalesInquiries,
   confirmSalesInquiry,
   updateSalesInquiry,
+  recheckSalesInquiryVipDiscount,
 } from '../services/salesInquiryLocalApiService';
 import { getProductPrice, fetchSalesInquiryProductById } from '../services/productLocalApiService';
 import { getSalesOrderByInquiry, getSalesOrder } from '../services/salesOrderLocalApiService';
@@ -68,6 +69,7 @@ import {
   benefitMonthKey,
   resolveLastMonthSpendForVipDocument,
   resolveDocumentVipDiscount,
+  computeVipDocumentDiscount,
   toVipSavePayload,
   type VipDealDocument,
 } from '../utils/vipDocumentDiscount';
@@ -203,6 +205,14 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const [jpegCaptureMode, setJpegCaptureMode] = useState(false);
   const [selectedInquiry, setSelectedInquiry] = useState<SalesInquiry | null>(null);
+  const [vipRecheckResult, setVipRecheckResult] = useState<{
+    inquiryId: string;
+    customerId: string;
+    salesDate: string;
+    applied: boolean;
+    tier: 'regular' | 'silver' | 'gold';
+    percentage: number;
+  } | null>(null);
   const [pendingCreateConfirmationId, setPendingCreateConfirmationId] = useState<string | null>(null);
   const previousInquiryRouteRef = useRef(initialInquiryId || '');
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
@@ -447,32 +457,51 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
   const handleRecheckVipDiscount = async () => {
     const customerId = selectedCustomer?.id;
-    if (!customerId || vipRechecking) return;
+    const inquiryId = selectedInquiry?.id;
+    if (!customerId || !inquiryId || isCreatingNew || vipRechecking) return;
 
     setVipRechecking(true);
     try {
-      const ledger = await customerLedgerService.getLedger(
+      const inquiry = await recheckSalesInquiryVipDiscount(inquiryId);
+      if (selectedCustomerIdRef.current !== customerId || inquiry.id !== selectedInquiry?.id) return;
+
+      setSelectedInquiry(inquiry);
+      setVipRecheckResult({
+        inquiryId: inquiry.id,
+        customerId,
+        salesDate: inquiry.sales_date,
+        applied: Boolean(inquiry.vip_applied),
+        tier: inquiry.vip_tier || 'regular',
+        percentage: Number(inquiry.vip_percentage || 0),
+      });
+      setInquiries((previous) => previous.map((entry) => entry.id === inquiry.id ? inquiry : entry));
+
+      // Update the summary metrics as well. The API's saved VIP result above is
+      // authoritative even if this secondary ledger refresh is unavailable.
+      void customerLedgerService.getLedger(
         customerId,
         { reportType: 'summary', dateType: 'all' },
         { cache: 'no-store' }
-      );
-      if (selectedCustomerIdRef.current !== customerId) return;
-
-      setPostedSales({
-        ishinomotoSales: ledger.metrics.ishinomoto_sales,
-        currentMonthSales: ledger.metrics.monthly_sales,
-        lastMonthSales: ledger.metrics.last_month_sales,
-        vipSilverDiscountRedeemedMonths: ledger.metrics.vip_silver_discount_redeemed_months || [],
-        summaryRows: (ledger.summary_rows || []).map((row) => ({
-          year: Number(row.year || 0),
-          month: Number(row.month || 0),
-          debit: Number(row.debit || 0),
-        })),
-      });
+      ).then((ledger) => {
+        if (selectedCustomerIdRef.current !== customerId) return;
+        setPostedSales({
+          ishinomotoSales: ledger.metrics.ishinomoto_sales,
+          currentMonthSales: ledger.metrics.monthly_sales,
+          lastMonthSales: ledger.metrics.last_month_sales,
+          vipSilverDiscountRedeemedMonths: ledger.metrics.vip_silver_discount_redeemed_months || [],
+          summaryRows: (ledger.summary_rows || []).map((row) => ({
+            year: Number(row.year || 0),
+            month: Number(row.month || 0),
+            debit: Number(row.debit || 0),
+          })),
+        });
+      }).catch(() => undefined);
       addToast({
         type: 'success',
         title: 'VIP discount rechecked',
-        description: 'Latest posted sales and VIP redemption status loaded.',
+        description: inquiry.vip_applied
+          ? `${inquiry.vip_tier.toUpperCase()} discount eligibility was recalculated and saved for ${inquiry.inquiry_no}.`
+          : `The discount was removed from ${inquiry.inquiry_no}; its number and items were kept.`,
       });
     } catch (error) {
       if (selectedCustomerIdRef.current === customerId) {
@@ -1124,6 +1153,20 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       today,
     });
 
+    const rechecked = vipRecheckResult
+      && vipRecheckResult.inquiryId === selectedInquiry?.id
+      && vipRecheckResult.customerId === selectedCustomer?.id
+      && vipRecheckResult.salesDate === salesDate;
+
+    if (rechecked) {
+      return computeVipDocumentDiscount({
+        grandTotal,
+        standing: vipRecheckResult.tier,
+        percentage: vipRecheckResult.percentage,
+        apply: vipRecheckResult.applied,
+      });
+    }
+
     return resolveDocumentVipDiscount({
       grandTotal,
       lastMonthSpend,
@@ -1143,6 +1186,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     selectedInquiry?.status,
     today,
     vipConfig,
+    vipRecheckResult,
   ]);
   const activeInquiryNumber = !isCreatingNew && selectedInquiry?.inquiry_no ? selectedInquiry.inquiry_no : inquiryNo;
   const activeInquiryNumberDisplay = formatInquiryDisplayNo(activeInquiryNumber);
@@ -2002,7 +2046,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
                   </tr>
                 </tbody>
               </table>
-              {selectedCustomer?.id && <div className="mt-2 flex justify-end">
+              {selectedCustomer?.id && selectedInquiry?.id && !isCreatingNew && selectedInquiry.is_editable !== false && !selectedInquiry.so_refno && !selectedInquiry.invoice_no && !selectedInquiry.dr_no && <div className="mt-2 flex justify-end">
                 <button
                   type="button"
                   onClick={() => void handleRecheckVipDiscount()}

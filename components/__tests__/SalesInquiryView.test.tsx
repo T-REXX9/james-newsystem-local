@@ -12,6 +12,7 @@ const updateSalesInquiryMock = vi.fn();
 const getAllSalesInquiriesMock = vi.fn();
 const getSalesInquiryMock = vi.fn();
 const confirmSalesInquiryMock = vi.fn();
+const recheckSalesInquiryVipDiscountMock = vi.fn();
 const approveInquiryMock = vi.fn();
 const convertToOrderMock = vi.fn();
 const getSalesOrderMock = vi.fn();
@@ -58,6 +59,7 @@ vi.mock('../../services/salesInquiryLocalApiService', () => ({
   updateSalesInquiry: (...args: any[]) => updateSalesInquiryMock(...args),
   getSalesInquiry: (...args: any[]) => getSalesInquiryMock(...args),
   confirmSalesInquiry: (...args: any[]) => confirmSalesInquiryMock(...args),
+  recheckSalesInquiryVipDiscount: (...args: any[]) => recheckSalesInquiryVipDiscountMock(...args),
   deleteSalesInquiry: vi.fn(),
 }));
 
@@ -1396,6 +1398,13 @@ describe('SalesInquiryView', () => {
       });
     getAllSalesInquiriesMock.mockResolvedValue([inquiry]);
     getSalesInquiryMock.mockResolvedValue(inquiry);
+    recheckSalesInquiryVipDiscountMock.mockResolvedValue({
+      ...inquiry,
+      vip_applied: false,
+      vip_tier: 'silver',
+      vip_percentage: 10,
+      vip_discount_amount: 0,
+    });
 
     render(<SalesInquiryView initialInquiryId={inquiry.id} today={new Date('2026-09-30T00:00:00')} />);
     await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(1));
@@ -1403,6 +1412,7 @@ describe('SalesInquiryView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Recheck VIP Discount' }));
 
+    expect(recheckSalesInquiryVipDiscountMock).toHaveBeenCalledWith(inquiry.id);
     await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(2));
     expect(getLedgerMock).toHaveBeenLastCalledWith(
       'c-1',
