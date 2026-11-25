@@ -54,6 +54,8 @@ export type CorporateDumpImportReport = {
     tables_skipped_keyless: string[];
     tables_skipped_no_shared_columns: string[];
     affected_rows: number;
+    rows_not_inserted: number;
+    tables_with_uninserted_rows: string[];
     details: string[];
   };
 };

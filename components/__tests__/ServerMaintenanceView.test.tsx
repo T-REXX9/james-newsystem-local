@@ -191,6 +191,8 @@ describe('ServerMaintenanceView', () => {
         tables_skipped_keyless: [],
         tables_skipped_no_shared_columns: [],
         affected_rows: 42,
+        rows_not_inserted: 0,
+        tables_with_uninserted_rows: [],
         details: [],
       },
     });
@@ -201,7 +203,7 @@ describe('ServerMaintenanceView', () => {
       />
     );
 
-    expect(await screen.findByRole('heading', { name: 'Import corporate dump' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Merge database dump' })).toBeInTheDocument();
     expect(screen.getByText(/Never drops or truncates live tables/i)).toBeInTheDocument();
     const overwritePrices = screen.getByRole('checkbox', { name: 'Overwrite existing product prices from the dump' });
     expect(overwritePrices).not.toBeChecked();

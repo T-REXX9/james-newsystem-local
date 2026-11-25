@@ -226,7 +226,7 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
               <HardDrive className="h-7 w-7 text-blue-700" /> Server Maintenance
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
-              Create a complete logical dump of the live database, import a corporate SQL dump safely, and configure Automatic Backup to a connected drive.
+              Export a complete logical dump or merge missing rows from a database dump. Imports preserve existing records and report rows that were not added.
             </p>
           </div>
           <button
@@ -351,11 +351,11 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white">
             <FileUp className="h-5 w-5 text-blue-700" />
-            <h2 className="text-lg font-bold">Import corporate dump</h2>
+            <h2 className="text-lg font-bold">Merge database dump</h2>
           </div>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
             {status?.corporate_dump_import?.safety ||
-              'Loads a corporate .sql / .sql.gz dump into a temporary staging database, then inserts only new rows using shared columns on existing tables. Product prices are preserved unless you choose to overwrite them. Never drops, truncates, or deletes live data.'}
+              'Loads a .sql / .sql.gz dump into temporary staging, then adds missing rows to matching tables. Existing records are preserved unless you choose to overwrite product prices. This is a merge, not a full database replacement; rows blocked by key conflicts are reported. It never drops, truncates, or deletes live data.'}
           </p>
 
           <label className="mt-4 flex items-start gap-3 text-sm text-slate-700 dark:text-slate-200">
@@ -393,13 +393,13 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                             setImportProgress(`Uploading dump… ${pct}%`);
                             return;
                           }
-                          setImportProgress('Merging into live database (no drops)…');
+                          setImportProgress('Merging rows into the live database…');
                         },
                       });
                       setImportReport(report);
                       addToast({
-                        type: 'success',
-                        message: `Imported ${report.filename}: ${report.import.tables_merged} tables merged, ${report.import.affected_rows} rows affected.`,
+                        type: report.import.rows_not_inserted > 0 ? 'warning' : 'success',
+                        message: `Merged ${report.filename}: ${report.import.affected_rows} rows added or updated; ${report.import.rows_not_inserted} rows not inserted.`,
                       });
                     } catch (error) {
       if (shouldSuppressAuthError(error)) return;
@@ -443,8 +443,17 @@ export const ServerMaintenanceView: React.FC<ServerMaintenanceViewProps> = ({ cu
                 Last import: {importReport.filename} ({formatBytes(importReport.bytes)})
               </p>
               <p className="mt-1">
-                Merged {importReport.import.tables_merged} tables · affected rows {importReport.import.affected_rows}
+                Merged {importReport.import.tables_merged} tables · rows added or updated {importReport.import.affected_rows}
               </p>
+              {importReport.import.rows_not_inserted > 0 ? (
+                <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950" role="status">
+                  <p className="font-bold">{importReport.import.rows_not_inserted} dump rows were not inserted.</p>
+                  <p className="mt-1 text-xs">These rows may already exist or may have a key conflict. Review the table counts below before treating this merge as complete.</p>
+                  {importReport.import.tables_with_uninserted_rows.length > 0 ? (
+                    <p className="mt-1 text-xs">{importReport.import.tables_with_uninserted_rows.join(', ')}</p>
+                  ) : null}
+                </div>
+              ) : null}
               {importReport.import.tables_skipped_missing.length > 0 ? (
                 <p className="mt-2 text-xs">
                   Skipped missing tables: {importReport.import.tables_skipped_missing.join(', ')}
