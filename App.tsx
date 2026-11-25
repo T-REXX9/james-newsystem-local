@@ -180,6 +180,19 @@ const getModuleLabel = (moduleId: string): string => {
   return match?.label || canonical;
 };
 
+const PAGE_FONT_SCALE_STORAGE_KEY = 'tndopc_page_font_scale';
+
+const getStoredPageFontScale = (): number => {
+  try {
+    const storedScale = Number(window.localStorage.getItem(PAGE_FONT_SCALE_STORAGE_KEY));
+    return Number.isFinite(storedScale) && storedScale >= 0.8 && storedScale <= 1.5
+      ? storedScale
+      : 1;
+  } catch {
+    return 1;
+  }
+};
+
 const App: React.FC = () => {
   const initialRouteState = getRouteStateFromLocation();
   const initialStoredSession = getLocalAuthSession();
@@ -195,6 +208,7 @@ const App: React.FC = () => {
   const [appLoading, setAppLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState(initialRouteState.tab);
+  const [pageFontScale, setPageFontScale] = useState(getStoredPageFontScale);
   const [moduleContext, setModuleContext] = useState<Record<string, Record<string, string>>>(
     initialRouteState.payload ? { [initialRouteState.tab]: initialRouteState.payload } : {}
   );
@@ -202,6 +216,14 @@ const App: React.FC = () => {
   const moduleContextRef = useRef(moduleContext);
   activeTabRef.current = activeTab;
   moduleContextRef.current = moduleContext;
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PAGE_FONT_SCALE_STORAGE_KEY, String(pageFontScale));
+    } catch {
+      // Keep the in-memory setting when browser storage is unavailable.
+    }
+  }, [pageFontScale]);
 
   const applyLocalAuthSession = (authSession: LocalAuthSession | null) => {
     currentSessionRef.current = authSession;
@@ -1016,11 +1038,18 @@ const App: React.FC = () => {
               canGoBack={canRetraceWorkflowHistory()}
               user={userProfile}
               onSignOut={handleSignOut}
+              pageFontScale={pageFontScale}
+              onPageFontScaleChange={setPageFontScale}
             />
 
             <div className="flex flex-1 overflow-hidden pt-16 print:block print:flex-none print:overflow-visible print:pt-0">
               <main className="flex-1 overflow-hidden flex flex-col relative bg-slate-100 dark:bg-slate-950 print:block print:overflow-visible">
-                {renderContent()}
+                <div
+                  className="page-font-scaled h-full min-h-0 min-w-0 print:h-auto"
+                  style={{ '--page-font-scale': pageFontScale } as React.CSSProperties}
+                >
+                  {renderContent()}
+                </div>
               </main>
             </div>
           </div>

@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.page-font-scaled {
+  zoom: var(--page-font-scale, 1);
+}
+
+@media print {
+  .page-font-scaled {
+    zoom: 1;
+  }
+}
