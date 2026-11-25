@@ -1404,6 +1404,11 @@ describe('SalesInquiryView', () => {
     await user.click(screen.getByRole('button', { name: 'Recheck VIP Discount' }));
 
     await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(2));
+    expect(getLedgerMock).toHaveBeenLastCalledWith(
+      'c-1',
+      { reportType: 'summary', dateType: 'all' },
+      { cache: 'no-store' }
+    );
     await waitFor(() => {
       expect(screen.queryByText('10% VIP SILVER = 100.00')).not.toBeInTheDocument();
     });

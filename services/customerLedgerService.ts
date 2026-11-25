@@ -253,7 +253,8 @@ export const customerLedgerService = {
       dateType: LedgerDateType;
       dateFrom?: string;
       dateTo?: string;
-    }
+    },
+    requestOptions: { cache?: RequestCache } = {}
   ): Promise<CustomerLedgerResponse> {
     const query = new URLSearchParams({
       report_type: filters.reportType,
@@ -264,7 +265,8 @@ export const customerLedgerService = {
     if (filters.dateTo) query.set('date_to', filters.dateTo);
 
     const data = await requestApi(
-      `${API_BASE_URL}/customers/${encodeURIComponent(sessionId)}/ledger?${query.toString()}`
+      `${API_BASE_URL}/customers/${encodeURIComponent(sessionId)}/ledger?${query.toString()}`,
+      requestOptions.cache ? { cache: requestOptions.cache } : undefined
     );
 
     const rows = Array.isArray(data?.rows) ? data.rows : [];

@@ -451,7 +451,11 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
 
     setVipRechecking(true);
     try {
-      const ledger = await customerLedgerService.getLedger(customerId, { reportType: 'summary', dateType: 'all' });
+      const ledger = await customerLedgerService.getLedger(
+        customerId,
+        { reportType: 'summary', dateType: 'all' },
+        { cache: 'no-store' }
+      );
       if (selectedCustomerIdRef.current !== customerId) return;
 
       setPostedSales({

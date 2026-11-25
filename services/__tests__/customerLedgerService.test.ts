@@ -61,6 +61,30 @@ describe('customerLedgerService', () => {
     expect(ledger.metrics.vip_unlimited_discount_threshold).toBe(45000);
   });
 
+  it('can bypass cached ledger data when the user manually rechecks VIP eligibility', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
+      customer: { session_id: 'cust-1', company: 'Acme', customer_code: 'C-1' },
+      report_type: 'summary',
+      date_type: 'all',
+      metrics: { vip_silver_discount_redeemed_months: ['2026-11'] },
+      rows: [],
+      summary_rows: [],
+      totals: {},
+    }));
+
+    const ledger = await customerLedgerService.getLedger(
+      'cust-1',
+      { reportType: 'summary', dateType: 'all' },
+      { cache: 'no-store' }
+    );
+
+    expect(ledger.metrics.vip_silver_discount_redeemed_months).toEqual(['2026-11']);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/customers/cust-1/ledger?'),
+      expect.objectContaining({ cache: 'no-store', headers: expect.any(Headers) })
+    );
+  });
+
   it('sends the authenticated session when loading customer picker options', async () => {
     const fetchMock = vi.spyOn(global, 'fetch').mockResolvedValue(okResponse({
       items: [{ session_id: 'cust-1', company: 'Acme' }],
