@@ -23,6 +23,7 @@ import {
   syncDocumentPolicyState,
   getAllSalesOrders,
   unpostSalesOrder,
+  recalculateSalesOrderVipDiscount,
   updateSalesOrder,
 } from '../services/salesOrderLocalApiService';
 import { fetchContactById, fetchContacts } from '../services/customerDatabaseLocalApiService';
@@ -157,6 +158,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
   const [cancelLoading, setCancelLoading] = useState(false);
   const [unpostModalOpen, setUnpostModalOpen] = useState(false);
   const [unpostLoading, setUnpostLoading] = useState(false);
+  const [vipRecalculateModalOpen, setVipRecalculateModalOpen] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [exportingJpeg, setExportingJpeg] = useState(false);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -718,6 +720,31 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     }
   };
 
+  const handleRecalculateVipDiscount = async () => {
+    if (!selectedOrder || !canRecalculateVipDiscount) return;
+
+    try {
+      const refreshed = await recalculateSalesOrderVipDiscount(selectedOrder.id);
+      setSelectedOrder(refreshed);
+      setOrders((current) => current.map((row) => row.id === refreshed.id ? refreshed : row));
+      addToast({
+        type: 'success',
+        title: refreshed.vip_applied ? 'VIP discount recalculated' : 'No VIP discount applies',
+        description: refreshed.vip_applied
+          ? `${refreshed.vip_tier} VIP discount: ${formatCurrency(refreshed.vip_discount_amount)}.`
+          : `The order is now ${refreshed.vip_tier || 'regular'} with no VIP discount.`,
+      });
+    } catch (error) {
+      if (shouldSuppressAuthError(error)) throw error;
+      addToast({
+        type: 'error',
+        title: 'Unable to recalculate VIP discount',
+        description: error instanceof Error ? error.message : 'Please try again.',
+      });
+      throw error;
+    }
+  };
+
   // Legacy flow: the Sales Inquiry owns order details and line items. A Sales
   // Order can send the user back to that inquiry only before an Order Slip or
   // Invoice has been generated; saving the inquiry synchronizes this order.
@@ -726,6 +753,17 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
     && selectedOrder?.is_editable !== false
     && !selectedOrder?.order_slip_no
     && !selectedOrder?.invoice_no;
+  const canRecalculateVipDiscount = canEdit
+    && Boolean(selectedOrder?.inquiry_id)
+    && !['posted', 'cancelled'].includes(normalizeStatus(selectedOrder?.status))
+    && selectedOrder?.is_editable !== false
+    && !selectedOrder?.order_slip_no
+    && !selectedOrder?.invoice_no;
+  const vipRecalculationBlockedReason = normalizeStatus(selectedOrder?.status) === 'cancelled'
+    ? 'Cancelled sales orders cannot be recalculated.'
+    : selectedOrder?.order_slip_no || selectedOrder?.invoice_no || selectedOrder?.is_editable === false || normalizeStatus(selectedOrder?.status) === 'posted'
+      ? 'Unpost the linked order slip or invoice before recalculating.'
+      : undefined;
 
   const handleEditThroughInquiry = () => {
     if (!selectedOrder?.inquiry_id || !canEditThroughInquiry) return;
@@ -1169,6 +1207,7 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
 
               {selectedOrder && <div data-jpeg-export-ignore className="mt-3 flex flex-wrap justify-end gap-[5px] border-t border-[#e3e3e3] pt-4 print:hidden">
                 {canEditThroughInquiry && <button type="button" onClick={handleEditThroughInquiry} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Edit</button>}
+                {canEdit && selectedOrder.inquiry_id && <button type="button" onClick={() => setVipRecalculateModalOpen(true)} disabled={!canRecalculateVipDiscount} title={vipRecalculationBlockedReason} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-50">Recalculate VIP Discount</button>}
                 {canGenerate && canAdd && <button type="button" onClick={() => setConversionModalOpen(true)} className="rounded-[4px] bg-[#4caf50] px-[18px] py-[9px] text-[13px] text-white">Generate Sales Transaction</button>}
                 {canGenerate && canAdd && <button type="button" onClick={handlePrint} className="rounded-[4px] bg-[#5d82a2] px-[18px] py-[9px] text-[13px] text-white">Print SO</button>}
                 {canGenerate && canDelete && <button type="button" onClick={() => setCancelModalOpen(true)} className="rounded-[4px] bg-[#d64b47] px-[18px] py-[9px] text-[13px] text-white">Cancel SO</button>}
@@ -1197,6 +1236,17 @@ const SalesOrderView: React.FC<SalesOrderViewProps> = ({ initialOrderId, initial
       {conversionModalOpen && selectedOrder && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"><div className="w-full max-w-md rounded-[5px] bg-white p-5 shadow-xl"><h3 className="mb-3 text-[18px] font-semibold">Convert to Document</h3><p className="text-[13px] text-[#555]">This order will be converted based on the customer&apos;s transaction type. Suggested document: <strong>{documentSuggestion}</strong>.</p><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setConversionModalOpen(false)} className="rounded border border-[#ccc] px-4 py-2 text-[13px]">Cancel</button><button type="button" onClick={() => void handleConversion()} disabled={conversionLoading} className="rounded bg-[#337ab7] px-4 py-2 text-[13px] text-white disabled:opacity-50">{conversionLoading ? 'Converting...' : 'Convert'}</button></div></div></div>}
 
       <ConfirmModal isOpen={unpostModalOpen && Boolean(selectedOrder)} onClose={() => { if (!unpostLoading) setUnpostModalOpen(false); }} onConfirm={handleUnpost} title="Unpost Sales Order" message={`Unpost Sales Order ${selectedOrder?.order_no || selectedOrder?.reference_no || selectedOrder?.id || ''}? This will remove its linked invoice or order slip and return the sales order to pending.`} confirmLabel={unpostLoading ? 'Unposting...' : 'Unpost'} cancelLabel="Cancel" variant="warning" />
+
+      <ConfirmModal
+        isOpen={vipRecalculateModalOpen && Boolean(selectedOrder)}
+        onClose={() => setVipRecalculateModalOpen(false)}
+        onConfirm={handleRecalculateVipDiscount}
+        title="Recalculate VIP Discount"
+        message={`Recalculate the VIP tier and discount for ${selectedOrder?.order_no || 'this sales order'} using its linked sales inquiry and posted sales for the inquiry's benefit month?`}
+        confirmLabel="Recalculate"
+        cancelLabel="Cancel"
+        variant="warning"
+      />
 
       {showPrintPreview && selectedOrder && (
         <SalesOrderPrintPreview

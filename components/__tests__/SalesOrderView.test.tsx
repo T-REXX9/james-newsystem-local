@@ -10,6 +10,7 @@ const getAllSalesOrdersMock = vi.fn();
 const getSalesOrderMock = vi.fn();
 const convertToDocumentMock = vi.fn();
 const updateSalesOrderMock = vi.fn();
+const recalculateSalesOrderVipDiscountMock = vi.fn();
 const fetchContactsMock = vi.fn();
 const fetchContactByIdMock = vi.fn();
 const fetchProfilesMock = vi.fn();
@@ -28,6 +29,7 @@ vi.mock('../../services/salesOrderLocalApiService', () => ({
   getAllSalesOrders: (...args: any[]) => getAllSalesOrdersMock(...args),
   syncDocumentPolicyState: vi.fn(),
   unpostSalesOrder: vi.fn(),
+  recalculateSalesOrderVipDiscount: (...args: any[]) => recalculateSalesOrderVipDiscountMock(...args),
   updateSalesOrder: (...args: any[]) => updateSalesOrderMock(...args),
 }));
 
@@ -268,6 +270,53 @@ describe('SalesOrderView', () => {
     await user.click(screen.getByRole('button', { name: 'Convert' }));
 
     await waitFor(() => expect(convertToDocumentMock).toHaveBeenCalledWith(order.id));
+  });
+
+  it('recalculates VIP for a selected inquiry-linked order and refreshes the displayed values', async () => {
+    const user = userEvent.setup();
+    const order = makeOrder({ id: 'legacy-vip-order', order_no: 'SO-LEGACY-VIP', inquiry_id: 'inq-legacy' });
+    const updated = makeOrder({
+      ...order,
+      vip_applied: true,
+      vip_tier: 'silver',
+      vip_percentage: 10,
+      vip_discount_amount: 100,
+      total_to_pay: 900,
+      grand_total: 1000,
+    });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    recalculateSalesOrderVipDiscountMock.mockResolvedValue(updated);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp', transactionType: 'Invoice' }]);
+
+    renderView({ initialOrderId: order.id });
+
+    await screen.findByDisplayValue('SO-LEGACY-VIP');
+    await user.click(screen.getByRole('button', { name: 'Recalculate VIP Discount' }));
+    await screen.findByText('Recalculate VIP Discount', { selector: 'h2' });
+    await user.click(screen.getByRole('button', { name: 'Recalculate' }));
+
+    await waitFor(() => expect(recalculateSalesOrderVipDiscountMock).toHaveBeenCalledWith(order.id));
+    expect(await screen.findByText('VIP discount recalculated')).toBeVisible();
+    await waitFor(() => expect(screen.getByText('100.00')).toBeVisible());
+  });
+
+  it('disables VIP recalculation when an order already has a linked invoice', async () => {
+    const order = makeOrder({
+      id: 'invoiced-vip-order',
+      inquiry_id: 'inq-legacy',
+      invoice_no: 'INV-LOCKED',
+      is_editable: false,
+    });
+    getAllSalesOrdersMock.mockResolvedValue([order]);
+    getSalesOrderMock.mockResolvedValue(order);
+    fetchContactsMock.mockResolvedValue([{ id: 'contact-1', company: 'Acme Corp' }]);
+
+    renderView({ initialOrderId: order.id });
+
+    const button = await screen.findByRole('button', { name: 'Recalculate VIP Discount' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('title', 'Unpost the linked order slip or invoice before recalculating.');
   });
 
   it('shows the customer summary bar with the Sales Inquiry metrics', async () => {
