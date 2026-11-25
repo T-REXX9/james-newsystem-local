@@ -1307,6 +1307,61 @@ describe('SalesInquiryView', () => {
     expect(screen.getAllByText('1000.00').length).toBeGreaterThan(0);
   });
 
+  it('refreshes VIP redemption state when switching inquiries for the same customer', async () => {
+    const user = userEvent.setup();
+    const earlierInquiry = makeInquiry({
+      id: 'inq-before-redemption',
+      inquiry_no: 'INQ26-20480',
+      contact_id: 'c-1',
+      sales_date: '2026-09-10',
+      grand_total: 1000,
+      items: [{
+        id: 'item-before-redemption',
+        inquiry_id: 'inq-before-redemption',
+        item_id: 'p-1',
+        qty: 1,
+        part_no: 'PN-1',
+        item_code: 'IC-1',
+        location: '',
+        description: 'Widget',
+        unit_price: 1000,
+        amount: 1000,
+        remark: '',
+        approval_status: 'approved',
+      }],
+    });
+    const laterInquiry = makeInquiry({
+      ...earlierInquiry,
+      id: 'inq-after-redemption-same-customer',
+      inquiry_no: 'INQ26-20481',
+    });
+    getLedgerMock
+      .mockResolvedValueOnce({
+        metrics: { last_month_sales: 15000, vip_silver_discount_redeemed_months: [] },
+        summary_rows: [],
+      })
+      .mockResolvedValueOnce({
+        metrics: { last_month_sales: 15000, vip_silver_discount_redeemed_months: ['2026-09'] },
+        summary_rows: [],
+      });
+    getAllSalesInquiriesMock.mockResolvedValue([earlierInquiry, laterInquiry]);
+    getSalesInquiryMock.mockImplementation(async (id: string) => (
+      id === earlierInquiry.id ? earlierInquiry : laterInquiry
+    ));
+
+    render(<SalesInquiryView today={new Date('2026-09-30T00:00:00')} />);
+    await user.click(await screen.findByText('INQ26-20480'));
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('10% VIP SILVER = 100.00')).toBeInTheDocument();
+
+    await user.click(await screen.findByText('INQ26-20481'));
+    await waitFor(() => expect(getLedgerMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText('10% VIP SILVER = 100.00')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('TOTAL to pay :')).not.toBeInTheDocument();
+  });
+
   it('shows VIP Gold discount and TOTAL to pay on a new qualifying inquiry', async () => {
     const user = userEvent.setup();
     getLedgerMock.mockResolvedValue({

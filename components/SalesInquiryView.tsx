@@ -437,7 +437,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [selectedCustomer?.id]);
+  }, [selectedCustomer?.id, selectedInquiry?.id]);
 
   // Items Table
   const [items, setItems] = useState<InquiryItemRow[]>([]);
