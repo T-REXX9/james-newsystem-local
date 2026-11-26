@@ -213,6 +213,16 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     tier: 'regular' | 'silver' | 'gold';
     percentage: number;
   } | null>(null);
+  const rememberVipResult = (inquiry: SalesInquiry) => {
+    setVipRecheckResult({
+      inquiryId: inquiry.id,
+      customerId: inquiry.contact_id,
+      salesDate: inquiry.sales_date,
+      applied: Boolean(inquiry.vip_applied),
+      tier: inquiry.vip_tier || 'regular',
+      percentage: Number(inquiry.vip_percentage || 0),
+    });
+  };
   const [pendingCreateConfirmationId, setPendingCreateConfirmationId] = useState<string | null>(null);
   const previousInquiryRouteRef = useRef(initialInquiryId || '');
   const [statusFilter, setStatusFilter] = useState<'all' | SalesInquiryStatus>('all');
@@ -466,14 +476,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
       if (selectedCustomerIdRef.current !== customerId || inquiry.id !== selectedInquiry?.id) return;
 
       setSelectedInquiry(inquiry);
-      setVipRecheckResult({
-        inquiryId: inquiry.id,
-        customerId,
-        salesDate: inquiry.sales_date,
-        applied: Boolean(inquiry.vip_applied),
-        tier: inquiry.vip_tier || 'regular',
-        percentage: Number(inquiry.vip_percentage || 0),
-      });
+      rememberVipResult(inquiry);
       setInquiries((previous) => previous.map((entry) => entry.id === inquiry.id ? inquiry : entry));
 
       // Update the summary metrics as well. The API's saved VIP result above is
@@ -1374,6 +1377,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         }
 
         setSelectedInquiry(finalInquiry);
+        rememberVipResult(finalInquiry);
         loadInquiryIntoForm(finalInquiry);
         return true;
       }
@@ -1384,6 +1388,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
         setReplacementSourceId(null);
         setIsCreatingNew(false);
         setSelectedInquiry(replacement);
+        rememberVipResult(replacement);
         loadInquiryIntoForm(replacement);
         addToast({ type: 'success', title: 'Linked inquiry copy created', description: `${replacement.inquiry_no} is linked to ${replacementSourceId}. The original remains active.` });
         return true;
@@ -1420,6 +1425,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
           status: SalesInquiryStatus.DRAFT,
         };
         setSelectedInquiry(createdInquiry);
+        rememberVipResult(createdInquiry);
         loadInquiryIntoForm(createdInquiry);
       } else {
         startNewInquiry();
