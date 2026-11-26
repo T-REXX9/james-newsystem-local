@@ -108,6 +108,10 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+const getSourceItemReturnLimit = (item: SourceItem, isNoReference: boolean): number => item.is_catalog_item
+  ? 1
+  : isNoReference ? item.remaining_qty : item.original_qty;
+
 /* -------------------------------------------------------------------------- */
 /*  Confirmation Dialog                                                        */
 /* -------------------------------------------------------------------------- */
@@ -147,15 +151,16 @@ const ConfirmDialog: React.FC<{
 /* -------------------------------------------------------------------------- */
 /*  Source Items Modal (pick items from linked Invoice/OR)                      */
 /* -------------------------------------------------------------------------- */
-const SourceItemsModal: React.FC<{
+export const SourceItemsModal: React.FC<{
   open: boolean;
   sourceItems: SourceItem[];
   loading: boolean;
+  isNoReference: boolean;
   emptyMessage?: string;
   onAdd: (item: SourceItem, qty: number, remark: string) => void;
   onClose: () => void;
   onSearch?: (query: string) => void;
-}> = ({ open, sourceItems, loading, emptyMessage, onAdd, onClose, onSearch }) => {
+}> = ({ open, sourceItems, loading, isNoReference, emptyMessage, onAdd, onClose, onSearch }) => {
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [remarks, setRemarks] = useState<Record<number, string>>({});
   const [itemSearch, setItemSearch] = useState('');
@@ -165,12 +170,12 @@ const SourceItemsModal: React.FC<{
       setItemSearch('');
       const defaults: Record<number, number> = {};
       sourceItems.forEach((si) => {
-        defaults[si.source_item_id] = si.is_catalog_item ? 1 : si.remaining_qty;
+        defaults[si.source_item_id] = getSourceItemReturnLimit(si, isNoReference);
       });
       setQuantities(defaults);
       setRemarks(Object.fromEntries(sourceItems.map((si) => [si.source_item_id, si.remark || ''])));
     }
-  }, [open, sourceItems]);
+  }, [open, sourceItems, isNoReference]);
 
   if (!open) return null;
   const searchNeedle = itemSearch.trim().toLowerCase();
@@ -191,7 +196,7 @@ const SourceItemsModal: React.FC<{
             <div className="text-center py-8 text-sm text-slate-500">Loading source items...</div>
           ) : sourceItems.length === 0 ? (
             <div className="text-center py-8 text-sm text-slate-500">
-              {emptyMessage || 'No available items to return. All items have been fully returned or no source document is linked.'}
+              {emptyMessage || 'No items were found on the linked source document.'}
             </div>
           ) : (
             <>
@@ -209,7 +214,7 @@ const SourceItemsModal: React.FC<{
                 <tr className="text-left text-xs uppercase tracking-wide">
                   <th className="px-3 py-2">Item Code</th>
                   <th className="px-3 py-2">Description</th>
-                  <th className="px-3 py-2 text-right">Available</th>
+                  <th className="px-3 py-2 text-right">{isNoReference ? 'Available' : 'Source Qty'}</th>
                   <th className="px-3 py-2 text-right">Return Qty</th>
                   <th className="px-3 py-2 text-right">Price</th>
                   <th className="px-3 py-2">Remark</th>
@@ -221,17 +226,18 @@ const SourceItemsModal: React.FC<{
                   <tr key={si.source_item_id} className="border-b border-slate-100 dark:border-slate-700">
                     <td className="px-3 py-2">{si.item_code}</td>
                     <td className="px-3 py-2">{si.description}</td>
-                    <td className="px-3 py-2 text-right">{si.is_catalog_item ? '—' : si.remaining_qty}</td>
+                    <td className="px-3 py-2 text-right">{si.is_catalog_item ? '—' : isNoReference ? si.remaining_qty : si.original_qty}</td>
                     <td className="px-3 py-2 text-right">
                       <input
                         type="number"
                         min={1}
-                        max={si.remaining_qty}
-                        value={quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty)}
+                        max={getSourceItemReturnLimit(si, isNoReference)}
+                        value={quantities[si.source_item_id] ?? getSourceItemReturnLimit(si, isNoReference)}
+                        disabled={getSourceItemReturnLimit(si, isNoReference) <= 0}
                         onChange={(e) =>
                           setQuantities((prev) => ({
                             ...prev,
-                            [si.source_item_id]: Math.max(1, Math.min(si.remaining_qty, Number(e.target.value) || 1)),
+                            [si.source_item_id]: Math.max(1, Math.min(getSourceItemReturnLimit(si, isNoReference), Number(e.target.value) || 1)),
                           }))
                         }
                         className="w-20 px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-right text-sm"
@@ -241,8 +247,9 @@ const SourceItemsModal: React.FC<{
                     <td className="px-3 py-2"><input aria-label={`Remark for ${si.item_code}`} value={remarks[si.source_item_id] || ''} onChange={(event) => setRemarks((prev) => ({ ...prev, [si.source_item_id]: event.target.value }))} className="w-32 rounded border border-slate-300 px-2 py-1 text-sm" /></td>
                     <td className="px-3 py-2 text-right">
                       <button
-                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? (si.is_catalog_item ? 1 : si.remaining_qty), remarks[si.source_item_id] || '')}
-                        className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700"
+                        onClick={() => onAdd(si, quantities[si.source_item_id] ?? getSourceItemReturnLimit(si, isNoReference), remarks[si.source_item_id] || '')}
+                        disabled={getSourceItemReturnLimit(si, isNoReference) <= 0}
+                        className="px-3 py-1 rounded bg-blue-600 text-white text-xs hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Add
                       </button>
@@ -1363,6 +1370,7 @@ const SalesReturnPage: React.FC<SalesReturnPageProps> = ({ initialMonth, initial
         open={showSourceItems}
         sourceItems={sourceItems}
         loading={loadingSource}
+        isNoReference={isNoReference}
         emptyMessage={isNoReference
           ? 'No purchased items found for this customer. Only parts in purchase history can be returned.'
           : undefined}
