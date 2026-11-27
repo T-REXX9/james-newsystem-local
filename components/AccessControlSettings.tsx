@@ -1,31 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  CheckCircle,
   ChevronLeft,
   ChevronRight,
   Loader2,
   Save,
   Shield,
   User,
-  UserPlus,
-  X,
 } from 'lucide-react';
 import {
   canonicalizeRoleName,
   DEFAULT_ACTION_PERMISSIONS,
-  DEFAULT_STAFF_ROLE,
   MODULE_ID_ALIASES,
-  ROLE_DEFAULT_ACCESS_RIGHTS,
   getPageActionPermissions,
   setPageActionPermission,
   isCompanyOwnerRole,
 } from '../constants';
-import {
-  createStaffAccountLocal,
-  fetchProfilesLocal,
-  updateProfileLocal,
-} from '../services/accessLocalApiService';
+import { fetchProfilesLocal, updateProfileLocal } from '../services/accessLocalApiService';
 import {
   createAccessGroup,
   deleteAccessGroup,
@@ -35,8 +26,6 @@ import {
 import { parseSupabaseError } from '../utils/errorHandler';
 import {
   AccessGroup,
-  CreateStaffAccountInput,
-  StaffAccountValidationError,
   UserProfile,
 } from '../types';
 import CustomLoadingSpinner from './CustomLoadingSpinner';
@@ -45,19 +34,9 @@ import { useToast } from './ToastProvider';
 import { ACCESS_MODULES, getAccessModuleState, toggleAccessModule, toggleAccessPage, canonicalizeAccessRights } from '../utils/accessModules';
 import { hasBackdatedPostingPermission, setBackdatedPostingPermission } from '../utils/backdatedPosting';
 
-import { shouldSuppressAuthError } from '../services/localApiAuth';
 const STAFF_PER_PAGE = 50;
 const STAFF_MEMBER_COLUMN_WIDTH = 288;
 const GROUP_COLUMN_WIDTH = 220;
-const INITIAL_NEW_USER_FORM = {
-  fullName: '',
-  email: '',
-  role: '',
-  password: '',
-  birthday: '',
-  mobile: '',
-};
-
 const canonicalizeGroups = (groups: AccessGroup[]): AccessGroup[] => {
   const merged = new Map<string, AccessGroup>();
 
@@ -153,17 +132,6 @@ const AccessControlSettings: React.FC = () => {
   const [actionPermissionChanges, setActionPermissionChanges] = useState<Record<string, boolean>>({});
   const [expandedModules, setExpandedModules] = useState<Record<string, string[]>>({});
 
-  const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [newUserForm, setNewUserForm] = useState(INITIAL_NEW_USER_FORM);
-  const [formErrors, setFormErrors] = useState<StaffAccountValidationError>({});
-  const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error' | null; text: string }>({
-    type: null,
-    text: '',
-  });
-  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
-  const [isRolesLoading, setIsRolesLoading] = useState(true);
-
   const groupMap = useMemo(
     () => Object.fromEntries(groups.map((group) => [group.id, group])),
     [groups]
@@ -210,18 +178,11 @@ const AccessControlSettings: React.FC = () => {
       const data = await fetchAccessGroups();
       const nextGroups = canonicalizeGroups(data);
       setGroups(nextGroups);
-      setAvailableRoles(nextGroups.map((group) => group.name));
-      setNewUserForm((prev) => {
-        if (prev.role && nextGroups.some((group) => group.name === prev.role)) return prev;
-        const defaultGroup = nextGroups.find((group) => group.name === DEFAULT_STAFF_ROLE) || nextGroups[0];
-        return { ...prev, role: defaultGroup?.name || '' };
-      });
       setProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
       setOriginalProfiles((prev) => canonicalizeProfiles(prev, nextGroups));
     } catch (error) {
       console.error('Unable to load access groups:', error);
       setGroups([]);
-      setAvailableRoles([]);
       addToast({
         type: 'error',
         title: 'Unable to load access groups',
@@ -230,7 +191,6 @@ const AccessControlSettings: React.FC = () => {
       });
     } finally {
       setIsGroupsLoading(false);
-      setIsRolesLoading(false);
     }
   };
 
@@ -447,103 +407,6 @@ const AccessControlSettings: React.FC = () => {
     }
   };
 
-  const validateForm = () => {
-    const errors: StaffAccountValidationError = {};
-
-    if (!newUserForm.fullName.trim()) {
-      errors.fullName = 'Full name is required';
-    }
-    if (!newUserForm.email.trim()) {
-      errors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUserForm.email)) {
-      errors.email = 'Enter a valid email address';
-    }
-    if (!newUserForm.password) {
-      errors.password = 'Password is required';
-    }
-    if (!newUserForm.role.trim()) {
-      errors.role = 'Please select a role';
-    } else if (availableRoles.length > 0 && !availableRoles.includes(newUserForm.role)) {
-      errors.role = 'Please select a valid role';
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const resetNewUserModalState = () => {
-    setNewUserForm({
-      ...INITIAL_NEW_USER_FORM,
-      role: availableRoles.includes(DEFAULT_STAFF_ROLE) ? DEFAULT_STAFF_ROLE : (availableRoles[0] || ''),
-    });
-    setFormErrors({});
-    setFormMessage({ type: null, text: '' });
-  };
-
-  const closeNewUserModal = () => {
-    setIsAddUserModalOpen(false);
-    resetNewUserModalState();
-  };
-
-  const handleCreateUser = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setFormMessage({ type: null, text: '' });
-    if (!validateForm()) return;
-
-    const payload: CreateStaffAccountInput = {
-      fullName: newUserForm.fullName.trim(),
-      email: newUserForm.email.trim(),
-      password: newUserForm.password,
-      role: newUserForm.role,
-      groupId: groups.find((group) => group.name === newUserForm.role)?.id,
-      birthday: newUserForm.birthday || undefined,
-      mobile: newUserForm.mobile || undefined,
-      accessRights: ROLE_DEFAULT_ACCESS_RIGHTS[newUserForm.role] || ROLE_DEFAULT_ACCESS_RIGHTS['Staff'] || ['home'],
-    };
-
-    setIsCreatingUser(true);
-    try {
-      const result = await createStaffAccountLocal(payload);
-
-      if (!result.success) {
-        setFormErrors(result.validationErrors || {});
-        setFormMessage({ type: 'error', text: result.error || 'Unable to create account. Please try again.' });
-        addToast({
-          type: 'error',
-          title: 'Unable to create user',
-          description: result.error || 'Unable to create account. Please try again.',
-          durationMs: 6000,
-        });
-        return;
-      }
-
-      setPage(1);
-      await loadProfiles(1);
-      await loadGroups();
-      setIsAddUserModalOpen(false);
-      resetNewUserModalState();
-      setFormMessage({ type: 'success', text: `Account created for ${payload.fullName}` });
-      addToast({
-        type: 'success',
-        title: 'User created',
-        description: 'Account has been created successfully.',
-        durationMs: 4000,
-      });
-    } catch (error: any) {
-      if (shouldSuppressAuthError(error)) return;
-      console.error('Unexpected error creating staff account:', error);
-      setFormMessage({ type: 'error', text: error?.message || 'Something went wrong while creating the account.' });
-      addToast({
-        type: 'error',
-        title: 'Unable to create user',
-        description: parseSupabaseError(error, 'user'),
-        durationMs: 6000,
-      });
-    } finally {
-      setIsCreatingUser(false);
-    }
-  };
-
   if (isLoading && isGroupsLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -580,32 +443,7 @@ const AccessControlSettings: React.FC = () => {
             Grant individual pages directly, with modules used to organize and select them.
           </p>
         </div>
-
-        {activeTab === 'staff' && (
-          <button
-            onClick={() => {
-              resetNewUserModalState();
-              setIsAddUserModalOpen(true);
-            }}
-            className="flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-          >
-            <UserPlus className="h-4 w-4" /> Add New Account
-          </button>
-        )}
       </div>
-
-      {!isAddUserModalOpen && formMessage.type && (
-        <div
-          className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
-            formMessage.type === 'success'
-              ? 'border-green-100 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/20 dark:text-green-200'
-              : 'border-red-100 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-200'
-          }`}
-        >
-          {formMessage.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-          <span>{formMessage.text}</span>
-        </div>
-      )}
 
       <div className="mb-6 inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         {[
@@ -873,135 +711,6 @@ const AccessControlSettings: React.FC = () => {
             </p>
           </div>
         </>
-      )}
-
-      {isAddUserModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-fadeIn">
-          <div className="flex w-full max-w-md flex-col rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 p-6 dark:border-slate-800">
-              <h2 className="text-lg font-bold text-slate-800 dark:text-white">Create Staff Account</h2>
-              <button
-                aria-label="Close create staff modal"
-                onClick={closeNewUserModal}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUser} noValidate className="space-y-4 p-6">
-              {formMessage.type === 'error' && (
-                <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-                  <AlertTriangle className="h-4 w-4" />
-                  <span className="flex-1">{formMessage.text}</span>
-                  <button
-                    type="button"
-                    onClick={() => setFormMessage({ type: null, text: '' })}
-                    className="text-xs font-bold underline decoration-red-400 hover:text-red-600"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Full Name</label>
-                <input
-                  required
-                  className="input-field"
-                  value={newUserForm.fullName}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, fullName: event.target.value })}
-                  placeholder="e.g. John Doe"
-                />
-                {formErrors.fullName && <p className="mt-1 text-xs text-red-500">{formErrors.fullName}</p>}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Role</label>
-                <select
-                  className="input-field"
-                  value={newUserForm.role}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, role: event.target.value })}
-                  disabled={isRolesLoading || availableRoles.length === 0}
-                >
-                  {isRolesLoading && <option value="">Loading roles...</option>}
-                  {!isRolesLoading && availableRoles.length === 0 && <option value="">No roles available</option>}
-                  {availableRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-                {formErrors.role && <p className="mt-1 text-xs text-red-500">{formErrors.role}</p>}
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Email</label>
-                <input
-                  required
-                  type="email"
-                  className="input-field"
-                  value={newUserForm.email}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, email: event.target.value })}
-                  placeholder="staff@company.com"
-                />
-                {formErrors.email && <p className="mt-1 text-xs text-red-500">{formErrors.email}</p>}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Birthday</label>
-                  <input
-                    type="date"
-                    className="input-field"
-                    value={newUserForm.birthday}
-                    onChange={(event) => setNewUserForm({ ...newUserForm, birthday: event.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Mobile Number</label>
-                  <input
-                    className="input-field"
-                    value={newUserForm.mobile}
-                    onChange={(event) => setNewUserForm({ ...newUserForm, mobile: event.target.value })}
-                    placeholder="0917..."
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Password</label>
-                <input
-                  required
-                  type="password"
-                  className="input-field"
-                  value={newUserForm.password}
-                  onChange={(event) => setNewUserForm({ ...newUserForm, password: event.target.value })}
-                  placeholder="Set initial password"
-                />
-                {formErrors.password && <p className="mt-1 text-xs text-red-500">{formErrors.password}</p>}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeNewUserModal}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingUser}
-                  className="inline-flex items-center gap-2 rounded-lg bg-brand-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {isCreatingUser ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                  Create Account
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
     </div>
   );

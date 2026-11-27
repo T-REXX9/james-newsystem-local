@@ -63,7 +63,7 @@ export interface StaffUpdateInput {
 
 export interface StaffCreateInput {
     full_name: string;
-    email: string;
+    email?: string;
     password: string;
     role: string;
     group_id?: string;

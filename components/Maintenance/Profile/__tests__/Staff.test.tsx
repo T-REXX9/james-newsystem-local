@@ -54,8 +54,9 @@ describe('Staff Management', () => {
     expect(screen.getByRole('heading', { name: 'Create Staff Account' })).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText('e.g. Jane Doe'), 'Jane Doe');
-    const accountInput = screen.getByPlaceholderText('Email address or username');
+    const accountInput = screen.getByPlaceholderText('Leave blank to generate a username');
     expect(accountInput).toHaveAttribute('type', 'text');
+    expect(accountInput).not.toBeRequired();
     await user.type(accountInput, 'melson');
     await user.type(screen.getByPlaceholderText('Minimum 8 characters'), 'StrongPass1');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Role' }), 'group-9');
@@ -69,6 +70,26 @@ describe('Staff Management', () => {
       group_id: 'group-9',
     })));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Create Staff Account' })).not.toBeInTheDocument());
+  });
+
+  it('creates an account without email and shows the generated login username', async () => {
+    const user = userEvent.setup();
+    vi.mocked(createStaff).mockResolvedValue({ id: 'staff-10', email: 'jane.doe' } as any);
+    render(<ToastProvider><Staff /></ToastProvider>);
+
+    await user.click(await screen.findByRole('button', { name: 'Add Staff Account' }));
+    await user.type(screen.getByPlaceholderText('e.g. Jane Doe'), 'Jane Doe');
+    await user.type(screen.getByPlaceholderText('Minimum 8 characters'), 'StrongPass1');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Role' }), 'group-9');
+    await user.click(screen.getByRole('button', { name: 'Create Account' }));
+
+    await waitFor(() => expect(createStaff).toHaveBeenCalledWith(expect.objectContaining({
+      full_name: 'Jane Doe',
+      email: '',
+      password: 'StrongPass1',
+      group_id: 'group-9',
+    })));
+    expect(await screen.findByText(/sign in with username jane\.doe/i)).toBeInTheDocument();
   });
 
   it('lets the Master User change a staff password and warns about sign-out', async () => {

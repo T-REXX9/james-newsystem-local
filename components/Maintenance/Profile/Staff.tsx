@@ -101,9 +101,10 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
                     group_id: formData.group_id || null,
                 });
             } else {
+                const emailOrUsername = email.trim();
                 const createdStaff = await createStaff({
                     full_name: String(formData.full_name || '').trim(),
-                    email: email.trim(),
+                    email: emailOrUsername,
                     password,
                     role: String(formData.role || 'Sales Agent'),
                     group_id: formData.group_id || undefined,
@@ -114,14 +115,22 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
                 if (formData.team_id && createdStaff.id) {
                     await updateStaff(createdStaff.id, { team_id: formData.team_id });
                 }
+                addToast({
+                    type: 'success',
+                    title: 'Staff account created',
+                    description: emailOrUsername
+                        ? 'The new staff account is ready to use.'
+                        : `The new staff member can sign in with username ${createdStaff.email}.`,
+                    durationMs: 6000,
+                });
+                onSuccess();
+                return;
             }
 
             addToast({
                 type: 'success',
-                title: initialData ? 'Staff updated' : 'Staff account created',
-                description: initialData
-                    ? 'Staff profile has been updated successfully.'
-                    : 'The new staff account is ready to use.',
+                title: 'Staff updated',
+                description: 'Staff profile has been updated successfully.',
                 durationMs: 4000,
             });
             onSuccess();
@@ -153,14 +162,13 @@ const StaffForm: React.FC<StaffFormProps> = ({ initialData, onClose, onSuccess }
                 />
             </div>
             <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email or Username</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email or Username (optional)</label>
                 <input
                     disabled={Boolean(initialData)}
-                    required
                     type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Email address or username"
+                    placeholder="Leave blank to generate a username"
                     className={`mt-1 block w-full rounded-md border-gray-300 p-2 shadow-sm sm:text-sm dark:border-gray-600 dark:bg-gray-700 ${initialData ? 'cursor-not-allowed bg-gray-100 dark:bg-gray-800' : 'bg-white'}`}
                 />
             </div>
