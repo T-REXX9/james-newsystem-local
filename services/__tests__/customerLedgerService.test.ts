@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildYearlySales, buildYearlySalesFromSummary, customerLedgerService, ledgerRowsToContactTransactions } from '../customerLedgerService';
 
 vi.mock('../localAuthService', () => ({
-  getLocalAuthSession: () => ({ token: 'test-token', context: { user: { main_id: 1 } } }),
+  getLocalAuthSession: () => ({ token: 'test-token', context: { main_userid: 1, user: { main_userid: 1 } } }),
 }));
 
 const okResponse = (data: unknown) => ({
@@ -207,5 +207,27 @@ describe('customerLedgerService', () => {
     expect(years.map((entry) => entry.year)).toEqual([2013, 2014, 2015]);
     expect(years.map((entry) => entry.total)).toEqual([26000, 90000, 45000]);
     expect(years[1].months.map((entry) => [entry.month, entry.total])).toEqual([[2, 40000], [3, 50000]]);
+  });
+
+  it('previews and applies customer-scoped freight duplicate cleanup through authenticated API routes', async () => {
+    const fetchMock = vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(okResponse({ groups_found: 2, groups_repaired: 1, rows_to_remove: 3, groups_skipped: 1 }))
+      .mockResolvedValueOnce(okResponse({ groups_found: 2, groups_repaired: 1, rows_to_remove: 3, groups_skipped: 1, cleaned: true, rows_removed: 3, archive_file: 'archive.json' }));
+
+    const preview = await customerLedgerService.previewFreightLedgerDuplicates('cust-1');
+    const result = await customerLedgerService.cleanupFreightLedgerDuplicates('cust-1');
+
+    expect(preview.rows_to_remove).toBe(3);
+    expect(result.rows_removed).toBe(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('/freight-charges/customers/cust-1/ledger-duplicates/preview?main_id=1'),
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/freight-charges/customers/cust-1/ledger-duplicates/cleanup?main_id=1'),
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    );
   });
 });

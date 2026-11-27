@@ -8,12 +8,16 @@ import CustomerLedgerView from '../CustomerLedgerView';
 const mockGetCustomers = vi.fn();
 const mockGetLedger = vi.fn();
 const mockExportLedgerCsv = vi.fn();
+const mockPreviewFreightLedgerDuplicates = vi.fn();
+const mockCleanupFreightLedgerDuplicates = vi.fn();
 
 vi.mock('../../services/customerLedgerService', () => ({
   customerLedgerService: {
     getCustomers: (...args: any[]) => mockGetCustomers(...args),
     getLedger: (...args: any[]) => mockGetLedger(...args),
     exportLedgerCsv: (...args: any[]) => mockExportLedgerCsv(...args),
+    previewFreightLedgerDuplicates: (...args: any[]) => mockPreviewFreightLedgerDuplicates(...args),
+    cleanupFreightLedgerDuplicates: (...args: any[]) => mockCleanupFreightLedgerDuplicates(...args),
   },
 }));
 
@@ -109,11 +113,29 @@ const mockLedgerSummary = {
 describe('CustomerLedgerView', () => {
   beforeEach(() => {
     cleanup();
+    localStorage.removeItem('local_api_auth_session');
     mockGetCustomers.mockReset();
     mockGetLedger.mockReset();
     mockExportLedgerCsv.mockReset();
+    mockPreviewFreightLedgerDuplicates.mockReset();
+    mockCleanupFreightLedgerDuplicates.mockReset();
     mockGetCustomers.mockResolvedValue([...mockCustomers]);
     mockGetLedger.mockResolvedValue(buildMockLedgerDetailed());
+    mockPreviewFreightLedgerDuplicates.mockResolvedValue({
+      groups_found: 1,
+      groups_repaired: 1,
+      rows_to_remove: 2,
+      groups_skipped: 0,
+    });
+    mockCleanupFreightLedgerDuplicates.mockResolvedValue({
+      groups_found: 1,
+      groups_repaired: 1,
+      rows_to_remove: 2,
+      groups_skipped: 0,
+      cleaned: true,
+      rows_removed: 2,
+      archive_file: 'customer-test.json',
+    });
   });
 
   const selectCustomer = async (name: string) => {
@@ -242,6 +264,28 @@ describe('CustomerLedgerView', () => {
     await waitFor(() => {
       expect(mockGetLedger).toHaveBeenCalledWith('cust-1', expect.objectContaining({ reportType: 'detailed', dateType: 'all' }));
     });
+  });
+
+  it('previews duplicates, confirms cleanup, and refreshes the selected ledger', async () => {
+    localStorage.setItem('local_api_auth_session', JSON.stringify({
+      token: 'test-token',
+      context: { user: { id: 1, main_userid: 1 }, main_userid: 1, user_type: '1' },
+      userProfile: { id: '1', user_type: '1' },
+    }));
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = await selectCustomer('Alpha Corp');
+    await waitFor(() => expect(mockGetLedger).toHaveBeenCalled());
+
+    await user.click(screen.getByRole('button', { name: /clean duplicate freight charges ledger rows for alpha corp/i }));
+
+    await waitFor(() => expect(mockCleanupFreightLedgerDuplicates).toHaveBeenCalledWith('cust-1'));
+    expect(mockPreviewFreightLedgerDuplicates).toHaveBeenCalledWith('cust-1');
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('2 duplicate ledger row(s)'));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('2 duplicate row(s) archived and removed.'));
+    await waitFor(() => expect(mockGetLedger.mock.calls.length).toBeGreaterThan(1));
+
+    confirmSpy.mockRestore();
+    localStorage.removeItem('local_api_auth_session');
   });
 
   it('shows only the time in the Timestamp column beside the separate date column', async () => {

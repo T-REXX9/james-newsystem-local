@@ -7,6 +7,7 @@ import {
   Tag,
   TrendingUp,
   WalletCards,
+  Wrench,
 } from 'lucide-react';
 import {
   customerLedgerService,
@@ -18,6 +19,8 @@ import {
 import ModuleRecordLink from './ModuleRecordLink';
 import CustomerStarIndicator from './CustomerStarIndicator';
 import { formatAccountingTime, formatCustomerSince, formatDate as formatDisplayDate, formatDateTime } from '../utils/formatUtils';
+import { hasActionPermission } from '../constants';
+import { getLocalAuthSession } from '../services/localAuthService';
 
 import { shouldSuppressAuthError } from '../services/localApiAuth';
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' });
@@ -494,6 +497,8 @@ const LedgerReport: React.FC<{
   loading: boolean;
   error: string;
   onBack: () => void;
+  canCleanupFreightLedger: boolean;
+  onCleanupComplete: () => void;
 }> = ({
   ledgerData,
   selectedCustomer,
@@ -508,7 +513,16 @@ const LedgerReport: React.FC<{
   loading,
   error,
   onBack,
+  canCleanupFreightLedger,
+  onCleanupComplete,
 }) => {
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [cleanupNotice, setCleanupNotice] = useState('');
+
+  useEffect(() => {
+    setCleanupNotice('');
+  }, [selectedCustomer?.sessionId]);
+
   if (!selectedCustomer) {
     return (
       <div className="flex h-full items-center justify-center p-8 text-sm text-[#999]">
@@ -520,6 +534,38 @@ const LedgerReport: React.FC<{
   const handleExportExcel = () => {
     if (!ledgerData) return;
     customerLedgerService.exportLedgerCsv(ledgerData);
+  };
+  const handleCleanupFreightDuplicates = async () => {
+    if (cleanupBusy) return;
+    setCleanupBusy(true);
+    setCleanupNotice('');
+    try {
+      const preview = await customerLedgerService.previewFreightLedgerDuplicates(selectedCustomer.sessionId);
+      if (preview.rows_to_remove === 0) {
+        setCleanupNotice('No safe duplicate freight entries found for this customer.');
+        return;
+      }
+
+      const skippedNote = preview.groups_skipped > 0
+        ? `\n\n${preview.groups_skipped} group(s) with mismatched or incomplete memo data will be left untouched.`
+        : '';
+      const confirmed = window.confirm(
+        `Found ${preview.rows_to_remove} duplicate ledger row(s) across ${preview.groups_repaired} freight memo(s) for ${selectedCustomer.company}. The original rows will be archived before removal.${skippedNote}\n\nContinue?`,
+      );
+      if (!confirmed) return;
+
+      const result = await customerLedgerService.cleanupFreightLedgerDuplicates(selectedCustomer.sessionId);
+      setCleanupNotice(
+        result.rows_removed
+          ? `${result.rows_removed} duplicate row(s) archived and removed.${result.groups_skipped ? ` ${result.groups_skipped} ambiguous group(s) left untouched.` : ''}`
+          : 'No eligible duplicate freight entries remained to clean.',
+      );
+      onCleanupComplete();
+    } catch (cleanupError) {
+      setCleanupNotice(cleanupError instanceof Error ? cleanupError.message : 'Unable to clean duplicate freight entries.');
+    } finally {
+      setCleanupBusy(false);
+    }
   };
   const ledgerMonthlySales = ledgerData?.metrics.ledger_monthly_sales ?? ledgerData?.metrics.monthly_sales ?? 0;
   const ledgerSalesDifference = ledgerMonthlySales - (ledgerData?.metrics.monthly_sales ?? 0);
@@ -536,6 +582,19 @@ const LedgerReport: React.FC<{
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#ddd] pb-4">
         <h2 className="text-xl font-bold uppercase tracking-tight text-[#263f52] 2xl:text-2xl">Customer Ledger (Accounting Copy)</h2>
         <div className="flex items-center gap-2">
+          {canCleanupFreightLedger ? (
+            <button
+              type="button"
+              onClick={handleCleanupFreightDuplicates}
+              disabled={cleanupBusy || loading}
+              title="Clean duplicate Freight Charges ledger rows"
+              aria-label={`Clean duplicate Freight Charges ledger rows for ${selectedCustomer.company}`}
+              className="inline-flex min-h-8 items-center gap-1 rounded border border-[#c8d2da] bg-white px-2 py-1 text-xs text-[#536879] hover:bg-[#f4f7f9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#337ab7] disabled:cursor-wait disabled:opacity-60"
+            >
+              <Wrench size={13} aria-hidden="true" />
+              {cleanupBusy ? 'Checking…' : 'Clean duplicates'}
+            </button>
+          ) : null}
           <button
             onClick={handleExportExcel}
             disabled={!ledgerData}
@@ -558,6 +617,11 @@ const LedgerReport: React.FC<{
           </button>
         </div>
       </div>
+      {cleanupNotice ? (
+        <p role="status" aria-live="polite" className="mb-3 text-xs text-[#536879]">
+          {cleanupNotice}
+        </p>
+      ) : null}
 
       {/* Report header */}
       <div className="border-b border-[#ddd] pb-4">
@@ -690,6 +754,11 @@ const CustomerLedgerView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [ledgerData, setLedgerData] = useState<CustomerLedgerResponse | null>(null);
+  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
+  const currentUser = getLocalAuthSession()?.userProfile ?? null;
+  const canCleanupFreightLedger = Boolean(
+    currentUser && hasActionPermission(currentUser, 'can_delete', 'Freight Charges (Debit)'),
+  );
 
   // Persist selected customer data across searches
   const selectedCustomerRef = useRef<LedgerCustomer | null>(null);
@@ -775,7 +844,7 @@ const CustomerLedgerView: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [selectedCustomerId, reportType, dateType, dateFrom, dateTo]);
+  }, [selectedCustomerId, reportType, dateType, dateFrom, dateTo, ledgerRefreshKey]);
 
   const handleCustomerSelect = (sessionId: string) => {
     setSelectedCustomerId(sessionId);
@@ -826,6 +895,8 @@ const CustomerLedgerView: React.FC = () => {
             loading={loading}
             error={error}
             onBack={handleBack}
+            canCleanupFreightLedger={canCleanupFreightLedger}
+            onCleanupComplete={() => setLedgerRefreshKey((current) => current + 1)}
           />
         </div>
       </div>

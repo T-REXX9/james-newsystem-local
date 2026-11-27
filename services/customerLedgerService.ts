@@ -97,6 +97,16 @@ export type CustomerLedgerResponse = {
   };
 };
 
+export type FreightLedgerDuplicateCleanupResult = {
+  groups_found: number;
+  groups_repaired: number;
+  rows_to_remove: number;
+  groups_skipped: number;
+  cleaned?: boolean;
+  rows_removed?: number;
+  archive_file?: string | null;
+};
+
 export type CustomerYearlySales = {
   year: number;
   total: number;
@@ -214,7 +224,7 @@ const toNumber = (value: unknown, fallback = 0): number => {
 
 const getMainId = (): number => {
   const session = getLocalAuthSession();
-  const mainId = Number(session?.context?.user?.main_id || API_MAIN_ID || 1);
+  const mainId = Number(session?.context?.main_userid || session?.context?.user?.main_userid || API_MAIN_ID || 1);
   return Number.isFinite(mainId) && mainId > 0 ? mainId : 1;
 };
 
@@ -348,6 +358,39 @@ export const customerLedgerService = {
         balance: toNumber(data?.totals?.balance),
         row_count: toNumber(data?.totals?.row_count),
       },
+    };
+  },
+
+  async previewFreightLedgerDuplicates(sessionId: string): Promise<FreightLedgerDuplicateCleanupResult> {
+    const mainId = getMainId();
+    const customerId = encodeURIComponent(sessionId);
+    const data = await requestApi(
+      `${API_BASE_URL}/freight-charges/customers/${customerId}/ledger-duplicates/preview?main_id=${mainId}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ main_id: mainId }) },
+    );
+    return {
+      groups_found: toNumber(data?.groups_found),
+      groups_repaired: toNumber(data?.groups_repaired),
+      rows_to_remove: toNumber(data?.rows_to_remove),
+      groups_skipped: toNumber(data?.groups_skipped),
+    };
+  },
+
+  async cleanupFreightLedgerDuplicates(sessionId: string): Promise<FreightLedgerDuplicateCleanupResult> {
+    const mainId = getMainId();
+    const customerId = encodeURIComponent(sessionId);
+    const data = await requestApi(
+      `${API_BASE_URL}/freight-charges/customers/${customerId}/ledger-duplicates/cleanup?main_id=${mainId}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ main_id: mainId }) },
+    );
+    return {
+      groups_found: toNumber(data?.groups_found),
+      groups_repaired: toNumber(data?.groups_repaired),
+      rows_to_remove: toNumber(data?.rows_to_remove),
+      groups_skipped: toNumber(data?.groups_skipped),
+      cleaned: Boolean(data?.cleaned),
+      rows_removed: toNumber(data?.rows_removed),
+      archive_file: data?.archive_file ? String(data.archive_file) : null,
     };
   },
 
