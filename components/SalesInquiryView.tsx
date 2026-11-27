@@ -439,7 +439,7 @@ const SalesInquiryView: React.FC<SalesInquiryViewProps> = ({
     let cancelled = false;
     setPostedSales({ ishinomotoSales: null, currentMonthSales: null, lastMonthSales: null, vipSilverDiscountRedeemedMonths: [], summaryRows: [] });
     void customerLedgerService
-      .getLedger(customerId, { reportType: 'summary', dateType: 'all' })
+      .getLedger(customerId, { reportType: 'summary', dateType: 'all' }, { cache: 'no-store' })
       .then((ledger) => {
         if (cancelled) return;
         setPostedSales({

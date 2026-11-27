@@ -1303,6 +1303,11 @@ describe('SalesInquiryView', () => {
     render(<SalesInquiryView today={new Date('2026-09-30T00:00:00')} />);
     await user.click(await screen.findByText('INQ26-20479'));
     await waitFor(() => expect(getLedgerMock).toHaveBeenCalled());
+    expect(getLedgerMock).toHaveBeenCalledWith(
+      'c-1',
+      { reportType: 'summary', dateType: 'all' },
+      { cache: 'no-store' }
+    );
 
     expect(screen.queryByText('10% VIP SILVER = 100.00')).not.toBeInTheDocument();
     expect(screen.queryByText('TOTAL to pay :')).not.toBeInTheDocument();
